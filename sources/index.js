@@ -1,3 +1,4 @@
+import './localization/zh-CN.js'
 import './threejs-override.js'
 import { Game } from './Game/Game.js'
 import consoleLog from './data/consoleLog.js'
