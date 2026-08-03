@@ -5,39 +5,56 @@ import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 
 const DEFAULT_CHUNK_COUNT = 19
+const DEFAULT_GZIP_SHA256 = '3303d511ffbbc94ebc02f6dd8a3b8f8bd75cf3f812c76918a1357d2dfac5b88b'
 const DEFAULT_GLB_SHA256 = 'f811dd420e6860c477dfe436ae5a2ddd6e100a7ee83e258a59b8b21163d1b375'
 
-function expectedChunkNames(count) {
-    return Array.from(
-        { length: count },
-        (_, index) => `part-${String(index + 1).padStart(3, '0')}.txt`,
-    )
+function chunkGroups(count) {
+    return Array.from({ length: count }, (_, index) => {
+        const number = String(index + 1).padStart(3, '0')
+        if (count === DEFAULT_CHUNK_COUNT && number === '016') {
+            return Array.from(
+                { length: 5 },
+                (_, segment) => `part-016-${String(segment + 1).padStart(2, '0')}.txt`,
+            )
+        }
+        return [`part-${number}.txt`]
+    })
 }
 
 export async function materializeVehicle({
     chunksDirectory,
     outputDirectory,
     expectedChunkCount = DEFAULT_CHUNK_COUNT,
-    expectedGlbSha256 = DEFAULT_GLB_SHA256,
+    expectedGzipSha256 = expectedChunkCount === DEFAULT_CHUNK_COUNT ? DEFAULT_GZIP_SHA256 : null,
+    expectedGlbSha256 = expectedChunkCount === DEFAULT_CHUNK_COUNT ? DEFAULT_GLB_SHA256 : null,
 }) {
-    const chunkNames = (await readdir(chunksDirectory))
-        .filter((name) => /^part-\d+\.txt$/.test(name))
-        .sort()
+    const availableNames = new Set(await readdir(chunksDirectory))
+    const groups = chunkGroups(expectedChunkCount)
+    const requiredNames = groups.flat()
+    const missingNames = requiredNames.filter((name) => !availableNames.has(name))
 
-    const requiredNames = expectedChunkNames(expectedChunkCount)
-    if (chunkNames.length !== requiredNames.length || chunkNames.some((name, index) => name !== requiredNames[index])) {
-        throw new Error(
-            `Incomplete vehicle chunks: expected ${requiredNames.join(', ')}, found ${chunkNames.join(', ') || 'none'}`,
-        )
-    }
+    if (missingNames.length > 0)
+        throw new Error(`Incomplete vehicle chunks: missing ${missingNames.join(', ')}`)
 
     const encodedParts = await Promise.all(
-        chunkNames.map(async (name) => (await readFile(path.join(chunksDirectory, name), 'utf8')).trim()),
+        groups.map(async (names) => {
+            const segments = await Promise.all(
+                names.map(async (name) => (await readFile(path.join(chunksDirectory, name), 'utf8')).trim()),
+            )
+            return segments.join('')
+        }),
     )
     const gzip = Buffer.from(encodedParts.join(''), 'base64')
 
     if (gzip.length < 2 || gzip[0] !== 0x1f || gzip[1] !== 0x8b)
         throw new Error('Vehicle chunks do not decode to a gzip stream')
+
+    const actualGzipSha256 = createHash('sha256').update(gzip).digest('hex')
+    if (expectedGzipSha256 && actualGzipSha256 !== expectedGzipSha256) {
+        throw new Error(
+            `Vehicle gzip checksum mismatch: expected ${expectedGzipSha256}, received ${actualGzipSha256}`,
+        )
+    }
 
     let glb
     try {
@@ -50,10 +67,10 @@ export async function materializeVehicle({
     if (glb.length < 12 || glb.subarray(0, 4).toString('ascii') !== 'glTF')
         throw new Error('Materialized vehicle is not a valid GLB file')
 
-    const actualSha256 = createHash('sha256').update(glb).digest('hex')
-    if (expectedGlbSha256 && actualSha256 !== expectedGlbSha256) {
+    const actualGlbSha256 = createHash('sha256').update(glb).digest('hex')
+    if (expectedGlbSha256 && actualGlbSha256 !== expectedGlbSha256) {
         throw new Error(
-            `Vehicle GLB checksum mismatch: expected ${expectedGlbSha256}, received ${actualSha256}`,
+            `Vehicle GLB checksum mismatch: expected ${expectedGlbSha256}, received ${actualGlbSha256}`,
         )
     }
 
