@@ -1,11 +1,18 @@
-name: Inspect SU7 wheels
+name: Verify SU7 four wheels
 
 on:
   push:
     branches: [ main ]
     paths:
-      - 'scripts/inspect_su7_wheel_asset.mjs'
-      - 'static/vehicle/default.glb'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/prepare-su7-four-wheels.mjs'
+      - 'scripts/su7-four-wheel-glb.mjs'
+      - 'scripts/test_su7_*.mjs'
+      - 'scripts/convert_su7.py'
+      - 'scripts/test_convert_su7.py'
+      - 'sources/Game/World/SU7*.js'
+      - 'sources/index.js'
       - '.github/workflows/inspect-su7-wheels.yml'
   workflow_dispatch:
 
@@ -13,7 +20,7 @@ permissions:
   contents: write
 
 jobs:
-  inspect:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,15 +29,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Inspect GLB wheel hierarchy
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-su7.txt
+      - name: Install Python dependencies
+        run: python -m pip install -r scripts/requirements-su7.txt
+      - name: Install Node dependencies
+        run: npm clean-install --progress=false
+      - name: Run tests
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
+      - name: Record transformed wheel hierarchy
         run: |
           mkdir -p docs/diagnostics
-          node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb > docs/diagnostics/su7-wheel-hierarchy.txt
-          cat docs/diagnostics/su7-wheel-hierarchy.txt
-      - name: Persist diagnostics
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "node=$(node --version)"
+            echo "python=$(python --version 2>&1)"
+            node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
+          } > docs/diagnostics/su7-four-wheel-verification.txt
+          cat docs/diagnostics/su7-four-wheel-verification.txt
+      - name: Persist verification
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add docs/diagnostics/su7-wheel-hierarchy.txt
-          git commit -m "chore: record SU7 wheel hierarchy" || exit 0
+          git add docs/diagnostics/su7-four-wheel-verification.txt
+          git commit -m "chore: record SU7 four-wheel verification" || exit 0
           git push
