@@ -9,8 +9,8 @@ export const COCKPIT_CAMERA_SETTINGS = Object.freeze({
     zoom: 1,
 })
 
-// Lower the centered eye point to move it away from the roof edge.
-export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.62, 0)
+// Raise the centered eye point slightly to reduce the visible hood cavity.
+export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.65, 0)
 export const DEFAULT_COCKPIT_REST_PITCH = - Math.PI / 30
 
 export const DEFAULT_COCKPIT_FORWARD_CORRECTION = new Quaternion()
