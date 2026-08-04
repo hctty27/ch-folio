@@ -3,6 +3,7 @@ import cockpitConfig from '../../data/cockpit.generated.json'
 import {
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
     computeCockpitPose,
+    dampCockpitPose,
     dampingAlpha,
 } from './cockpitPose.js'
 
@@ -49,6 +50,9 @@ export class CockpitView
         this.pose = {
             targetPosition: new THREE.Vector3(),
             targetQuaternion: new THREE.Quaternion(),
+            smoothedPosition: new THREE.Vector3(),
+            smoothedQuaternion: new THREE.Quaternion(),
+            smoothedInitialized: false,
             headLookQuaternion: new THREE.Quaternion(),
             headLookEuler: new THREE.Euler(0, 0, 0, 'YXZ'),
         }
@@ -351,6 +355,7 @@ export class CockpitView
         this.look.pitch = 0
         this.look.targetYaw = 0
         this.look.targetPitch = 0
+        this.pose.smoothedInitialized = false
         this.active = true
 
         for(const item of this.hiddenNodes)
@@ -368,6 +373,7 @@ export class CockpitView
         this.active = false
         this.pointer.id = null
         this.look.interacting = false
+        this.pose.smoothedInitialized = false
 
         const camera = this.game.view.camera
         if(this.savedCamera)
@@ -470,24 +476,28 @@ export class CockpitView
         this.pose.targetPosition.copy(targetPose.position)
         this.pose.targetQuaternion.copy(targetPose.quaternion)
 
-        const camera = this.game.view.camera
-        if(immediate)
+        if(immediate || !this.pose.smoothedInitialized)
         {
-            camera.position.copy(this.pose.targetPosition)
-            camera.quaternion.copy(this.pose.targetQuaternion)
+            this.pose.smoothedPosition.copy(this.pose.targetPosition)
+            this.pose.smoothedQuaternion.copy(this.pose.targetQuaternion)
+            this.pose.smoothedInitialized = true
         }
         else
         {
-            camera.position.lerp(
-                this.pose.targetPosition,
-                dampingAlpha(this.settings.positionDamping, this.game.ticker.delta),
-            )
-            camera.quaternion.slerp(
-                this.pose.targetQuaternion,
-                dampingAlpha(this.settings.rotationDamping, this.game.ticker.delta),
-            )
+            dampCockpitPose({
+                position: this.pose.smoothedPosition,
+                quaternion: this.pose.smoothedQuaternion,
+                targetPosition: this.pose.targetPosition,
+                targetQuaternion: this.pose.targetQuaternion,
+                positionDamping: this.settings.positionDamping,
+                rotationDamping: this.settings.rotationDamping,
+                delta: this.game.ticker.delta,
+            })
         }
 
+        const camera = this.game.view.camera
+        camera.position.copy(this.pose.smoothedPosition)
+        camera.quaternion.copy(this.pose.smoothedQuaternion)
         camera.updateMatrixWorld()
     }
 
