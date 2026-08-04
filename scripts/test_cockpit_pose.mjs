@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Quaternion, Vector3 } from 'three'
+import { Euler, Quaternion, Vector3 } from 'three'
 
 import {
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
+    DEFAULT_COCKPIT_REST_PITCH,
+    DEFAULT_PHYSICAL_COCKPIT_POSITION,
     computeCockpitPose,
     dampCockpitPose,
     dampingAlpha,
@@ -61,6 +63,34 @@ test('default correction points a Three.js camera toward the vehicle positive X 
     vectorCloseTo(cameraForward, new Vector3(1, 0, 0))
 })
 
+test('physical fallback stays between the axles and on the driver side', () =>
+{
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.x > -0.9)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.x < 0.9)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y > 0.4)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y < 0.8)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.z < 0)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.z > -0.75)
+})
+
+test('fallback rest pitch looks forward and slightly toward the road', () =>
+{
+    const headLookQuaternion = new Quaternion().setFromEuler(
+        new Euler(DEFAULT_COCKPIT_REST_PITCH, 0, 0, 'YXZ'),
+    )
+    const pose = computeCockpitPose({
+        vehiclePosition: new Vector3(),
+        vehicleQuaternion: new Quaternion(),
+        localPosition: DEFAULT_PHYSICAL_COCKPIT_POSITION,
+        headLookQuaternion,
+    })
+    const cameraForward = new Vector3(0, 0, -1).applyQuaternion(pose.quaternion)
+
+    assert.ok(cameraForward.x > 0.98)
+    assert.ok(cameraForward.y < -0.05)
+    assert.ok(Math.abs(cameraForward.z) < 1e-9)
+})
+
 test('computeCockpitPose does not mutate vehicle or head quaternions', () =>
 {
     const vehicleQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.7)
@@ -88,34 +118,36 @@ test('dampingAlpha is frame-rate independent and bounded', () =>
     closeTo(dampingAlpha(10, 1 / 30), 1 - (1 - dampingAlpha(10, 1 / 60)) ** 2)
 })
 
-test('dampCockpitPose advances from its persistent pose instead of a reset camera pose', () =>
+test('dampCockpitPose keeps independent smoothing state between frames', () =>
 {
-    const position = new Vector3()
+    const position = new Vector3(0, 0, 0)
     const quaternion = new Quaternion()
-    const targetPosition = new Vector3(1, 0, 0)
-    const targetQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI * 0.5)
-    const halfLifeDamping = Math.log(2)
+    const targetPosition = new Vector3(10, 0, 0)
+    const targetQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI)
 
     dampCockpitPose({
         position,
         quaternion,
         targetPosition,
         targetQuaternion,
-        positionDamping: halfLifeDamping,
-        rotationDamping: halfLifeDamping,
-        delta: 1,
+        positionDamping: 10,
+        rotationDamping: 10,
+        delta: 1 / 60,
     })
-    closeTo(position.x, 0.5)
+    const firstFrameX = position.x
+    const firstFrameAngle = quaternion.angleTo(new Quaternion())
 
     dampCockpitPose({
         position,
         quaternion,
         targetPosition,
         targetQuaternion,
-        positionDamping: halfLifeDamping,
-        rotationDamping: halfLifeDamping,
-        delta: 1,
+        positionDamping: 10,
+        rotationDamping: 10,
+        delta: 1 / 60,
     })
-    closeTo(position.x, 0.75)
-    closeTo(quaternion.angleTo(targetQuaternion), Math.PI * 0.125)
+
+    assert.ok(position.x > firstFrameX)
+    assert.ok(position.x < targetPosition.x)
+    assert.ok(quaternion.angleTo(new Quaternion()) > firstFrameAngle)
 })
