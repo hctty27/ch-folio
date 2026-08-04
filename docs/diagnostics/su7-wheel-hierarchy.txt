@@ -1,0 +1,9 @@
+{"input":"/home/runner/work/ch-folio/ch-folio/static/vehicle/default.glb","nodes":18,"meshes":14,"materials":11}
+{"depth":1,"index":1,"name":"chassis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[2,3,4,5,6,7,8,9,10,11,12]}
+{"depth":2,"index":2,"name":"bodyPainted","mesh":0,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[]}
+{"depth":2,"index":12,"name":"wheelContainer","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[13]}
+{"depth":3,"index":13,"name":"wheelCylinder","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[14,15,16,17]}
+{"depth":4,"index":14,"name":"wheelPainted","mesh":10,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[]}
+{"depth":4,"index":15,"name":"wheelPart_Mesh75","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[]}
+{"depth":4,"index":16,"name":"wheelPart_Mesh76","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[]}
+{"depth":4,"index":17,"name":"wheelPart_Mesh77","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[]}
