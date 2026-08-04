@@ -5,34 +5,47 @@ import test from 'node:test'
 import {
     CAMERA_TOGGLE_CONTROL,
     addCameraToggleControlHelp,
-    cameraToggleControlRowMarkup,
+    createCameraToggleControlRow,
     installCameraToggleControlHelp,
 } from '../sources/Game/Views/cameraControlsHelp.js'
 
+class FakeElement
+{
+    constructor(tagName)
+    {
+        this.tagName = tagName
+        this.dataset = {}
+        this.className = ''
+        this.textContent = ''
+        this.children = []
+    }
+
+    append(...children)
+    {
+        this.children.push(...children)
+    }
+
+    querySelector(selector)
+    {
+        assert.equal(selector, '[data-control="camera-toggle"]')
+        return this.children.find(
+            (child) => child.dataset.control === 'camera-toggle',
+        ) ?? null
+    }
+}
+
 function createFakeDocument(readyState = 'complete')
 {
-    let html = ''
     const listeners = new Map()
-    const tbody = {
-        querySelector(selector)
-        {
-            assert.equal(selector, '[data-control="camera-toggle"]')
-            return html.includes('data-control="camera-toggle"') ? {} : null
-        },
-        insertAdjacentHTML(position, value)
-        {
-            assert.equal(position, 'beforeend')
-            html += value
-        },
-        get html()
-        {
-            return html
-        },
-    }
+    const tbody = new FakeElement('tbody')
 
     return {
         readyState,
         tbody,
+        createElement(tagName)
+        {
+            return new FakeElement(tagName)
+        },
         querySelector(selector)
         {
             assert.equal(selector, '.controls-content .mouse-keyboard tbody')
@@ -57,8 +70,16 @@ test('camera toggle help uses C and the Chinese settings label', () =>
         key: 'C',
         label: '切换视角',
     })
-    assert.match(cameraToggleControlRowMarkup(), /<span class="key">C<\/span>/)
-    assert.match(cameraToggleControlRowMarkup(), /<td>切换视角<\/td>/)
+
+    const documentRef = createFakeDocument()
+    const row = createCameraToggleControlRow(documentRef)
+    const [keyCell, labelCell] = row.children
+    const key = keyCell.children[0]
+
+    assert.equal(row.dataset.control, 'camera-toggle')
+    assert.equal(key.className, 'key')
+    assert.equal(key.textContent, 'C')
+    assert.equal(labelCell.textContent, '切换视角')
 })
 
 test('camera toggle help is appended to keyboard and mouse controls once', () =>
@@ -67,10 +88,7 @@ test('camera toggle help is appended to keyboard and mouse controls once', () =>
 
     assert.equal(addCameraToggleControlHelp(documentRef), true)
     assert.equal(addCameraToggleControlHelp(documentRef), false)
-    assert.equal(
-        documentRef.tbody.html.match(/data-control="camera-toggle"/g)?.length,
-        1,
-    )
+    assert.equal(documentRef.tbody.children.length, 1)
 })
 
 test('camera toggle help waits for DOMContentLoaded when needed', () =>
@@ -78,11 +96,11 @@ test('camera toggle help waits for DOMContentLoaded when needed', () =>
     const documentRef = createFakeDocument('loading')
 
     assert.equal(installCameraToggleControlHelp(documentRef), false)
-    assert.equal(documentRef.tbody.html, '')
+    assert.equal(documentRef.tbody.children.length, 0)
 
     documentRef.dispatch('DOMContentLoaded')
 
-    assert.match(documentRef.tbody.html, /data-control="camera-toggle"/)
+    assert.equal(documentRef.tbody.children.length, 1)
 })
 
 test('application entry installs the camera toggle controls help', async () =>
