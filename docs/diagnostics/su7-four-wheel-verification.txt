@@ -1,4 +1,4 @@
-commit=061f3e7fceb98e9a8bf5ebf8248d7a74a65ba655
+commit=2498571a07ca48a2dfb04aeac28cdf163bdd2e50
 node=v22.23.1
 python=Python 3.12.13
 
@@ -10,11 +10,11 @@ Collecting Pillow<13,>=10 (from -r scripts/requirements-su7.txt (line 2))
 Collecting trimesh==4.11.1 (from -r scripts/requirements-su7.txt (line 3))
   Downloading trimesh-4.11.1-py3-none-any.whl.metadata (13 kB)
 Downloading trimesh-4.11.1-py3-none-any.whl (740 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 740.4/740.4 kB 71.5 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 740.4/740.4 kB 20.9 MB/s  0:00:00
 Downloading numpy-2.5.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 306.8 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 175.4 MB/s  0:00:00
 Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 338.6 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 359.0 MB/s  0:00:00
 Installing collected packages: Pillow, numpy, trimesh
 
 Successfully installed Pillow-12.3.0 numpy-2.5.1 trimesh-4.11.1
@@ -24,37 +24,11 @@ Successfully installed Pillow-12.3.0 numpy-2.5.1 trimesh-4.11.1
 exit=0
 
 ### npm clean-install --progress=false
-npm error code ERESOLVE
-npm error ERESOLVE could not resolve
-npm error
-npm error While resolving: vite-plugin-restart@0.4.1
-npm error Found: vite@7.2.4
-npm error node_modules/vite
-npm error   vite@"^7.2.4" from the root project
-npm error   peer vite@"^6.0.0 || ^7.0.0" from @vitejs/plugin-basic-ssl@2.1.0
-npm error   node_modules/@vitejs/plugin-basic-ssl
-npm error     @vitejs/plugin-basic-ssl@"^2.1.0" from the root project
-npm error   3 more (vite-plugin-node-polyfills, ...)
-npm error
-npm error Could not resolve dependency:
-npm error peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
-npm error node_modules/vite-plugin-restart
-npm error   vite-plugin-restart@"^0.4.1" from the root project
-npm error
-npm error Conflicting peer dependency: vite@5.4.21
-npm error node_modules/vite
-npm error   peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
-npm error   node_modules/vite-plugin-restart
-npm error     vite-plugin-restart@"^0.4.1" from the root project
-npm error
-npm error Fix the upstream dependency conflict, or retry
-npm error this command with --force or --legacy-peer-deps
-npm error to accept an incorrect (and potentially broken) dependency resolution.
-npm error
-npm error
-npm error For a full report see:
-npm error /home/runner/.npm/_logs/2026-08-04T09_23_10_700Z-eresolve-report.txt
-npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_23_10_700Z-debug-0.log
+npm error code ETARGET
+npm error notarget No matching version found for seedrandom@^10.4.0.
+npm error notarget In most cases you or one of your dependencies are requesting
+npm error notarget a package version that doesn't exist.
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_25_05_105Z-debug-0.log
 exit=1
 
 ### npm test
@@ -85,7 +59,7 @@ TAP version 13
 # Subtest: scripts/test_cockpit_pose.mjs
 not ok 1 - scripts/test_cockpit_pose.mjs
   ---
-  duration_ms: 55.307269
+  duration_ms: 104.518353
   type: 'test'
   location: '/home/runner/work/ch-folio/ch-folio/scripts/test_cockpit_pose.mjs:1:1'
   failureType: 'testCodeFailure'
@@ -97,13 +71,13 @@ not ok 1 - scripts/test_cockpit_pose.mjs
 # Subtest: materializeVehicle joins ordered chunks and writes both GLB targets
 ok 2 - materializeVehicle joins ordered chunks and writes both GLB targets
   ---
-  duration_ms: 15.297933
+  duration_ms: 8.828249
   type: 'test'
   ...
 # Subtest: materializeVehicle rejects an incomplete chunk sequence before decompression
 ok 3 - materializeVehicle rejects an incomplete chunk sequence before decompression
   ---
-  duration_ms: 2.770526
+  duration_ms: 1.626801
   type: 'test'
   ...
 # [SU7FourWheelController] using four independent SU7 wheel nodes
@@ -112,67 +86,67 @@ ok 3 - materializeVehicle rejects an incomplete chunk sequence before decompress
 # Subtest: hides legacy clones and drives four SU7 wheel roots
 ok 4 - hides legacy clones and drives four SU7 wheel roots
   ---
-  duration_ms: 3.626738
+  duration_ms: 2.295906
   type: 'test'
   ...
 # Subtest: uses the same roll direction for all normalized wheel pivots
 ok 5 - uses the same roll direction for all normalized wheel pivots
   ---
-  duration_ms: 2.081286
+  duration_ms: 1.126853
   type: 'test'
   ...
 # Subtest: only front wheels receive steering rotation
 ok 6 - only front wheels receive steering rotation
   ---
-  duration_ms: 0.567322
+  duration_ms: 0.445655
   type: 'test'
   ...
 # Subtest: creates four independent wheel roots in physical wheel order
 ok 7 - creates four independent wheel roots in physical wheel order
   ---
-  duration_ms: 4.062404
+  duration_ms: 3.487475
   type: 'test'
   ...
 # Subtest: keeps rolling meshes below roll pivot and brake meshes outside it
 ok 8 - keeps rolling meshes below roll pivot and brake meshes outside it
   ---
-  duration_ms: 0.902279
+  duration_ms: 0.733332
   type: 'test'
   ...
 # Subtest: corrects non-uniform rolling-plane scale before wheel rotation
 ok 9 - corrects non-uniform rolling-plane scale before wheel rotation
   ---
-  duration_ms: 0.751637
+  duration_ms: 0.621902
   type: 'test'
   ...
 # Subtest: bakes non-Z source axle into a dedicated correction node
 ok 10 - bakes non-Z source axle into a dedicated correction node
   ---
-  duration_ms: 0.540752
+  duration_ms: 0.489114
   type: 'test'
   ...
 # Subtest: is idempotent and preserves the legacy template for fallback
 ok 11 - is idempotent and preserves the legacy template for fallback
   ---
-  duration_ms: 1.158919
+  duration_ms: 1.086158
   type: 'test'
   ...
 # Subtest: rewrites only the JSON chunk and preserves binary bytes
 ok 12 - rewrites only the JSON chunk and preserves binary bytes
   ---
-  duration_ms: 1.140465
+  duration_ms: 1.207718
   type: 'test'
   ...
 # Subtest: discovers SU7 wheel nodes in physical wheel index order
 ok 13 - discovers SU7 wheel nodes in physical wheel index order
   ---
-  duration_ms: 1.772959
+  duration_ms: 1.423499
   type: 'test'
   ...
 # Subtest: falls back atomically when any required SU7 wheel node is missing
 ok 14 - falls back atomically when any required SU7 wheel node is missing
   ---
-  duration_ms: 0.385301
+  duration_ms: 0.329484
   type: 'test'
   ...
 1..14
@@ -183,7 +157,7 @@ ok 14 - falls back atomically when any required SU7 wheel node is missing
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 146.957057
+# duration_ms 301.463352
 exit=1
 
 ### npm run build
@@ -191,39 +165,11 @@ exit=1
 > bruno-simon-folio-2025@0.0.0 prebuild
 > npm install --no-save --package-lock=true --ignore-scripts --prefer-offline --audit=false --fund=false stylus@0.64.0
 
-npm error code ERESOLVE
-npm error ERESOLVE could not resolve
-npm error
-npm error While resolving: vite-plugin-restart@0.4.1
-npm error Found: vite@7.2.4
-npm error node_modules/vite
-npm error   peer vite@"^6.0.0 || ^7.0.0" from @vitejs/plugin-basic-ssl@2.1.0
-npm error   node_modules/@vitejs/plugin-basic-ssl
-npm error     @vitejs/plugin-basic-ssl@"^2.1.0" from the root project
-npm error   peer vite@"^2.0.0 || ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" from vite-plugin-node-polyfills@0.24.0
-npm error   node_modules/vite-plugin-node-polyfills
-npm error     vite-plugin-node-polyfills@"^0.24.0" from the root project
-npm error   3 more (vite-plugin-top-level-await, vite-plugin-wasm, the root project)
-npm error
-npm error Could not resolve dependency:
-npm error peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
-npm error node_modules/vite-plugin-restart
-npm error   vite-plugin-restart@"^0.4.1" from the root project
-npm error
-npm error Conflicting peer dependency: vite@5.4.21
-npm error node_modules/vite
-npm error   peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
-npm error   node_modules/vite-plugin-restart
-npm error     vite-plugin-restart@"^0.4.1" from the root project
-npm error
-npm error Fix the upstream dependency conflict, or retry
-npm error this command with --force or --legacy-peer-deps
-npm error to accept an incorrect (and potentially broken) dependency resolution.
-npm error
-npm error
-npm error For a full report see:
-npm error /home/runner/.npm/_logs/2026-08-04T09_23_13_891Z-eresolve-report.txt
-npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_23_13_891Z-debug-0.log
+npm error code ETARGET
+npm error notarget No matching version found for seedrandom@^10.4.0.
+npm error notarget In most cases you or one of your dependencies are requesting
+npm error notarget a package version that doesn't exist.
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_25_06_708Z-debug-0.log
 exit=1
 
 ### node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
