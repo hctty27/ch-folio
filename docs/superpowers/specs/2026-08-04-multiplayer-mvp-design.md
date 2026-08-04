@@ -56,7 +56,7 @@ Every message is a MessagePack map with compact keys:
 - `v`: protocol version, currently `1`.
 - `t`: message type.
 - `seq`: monotonically increasing client sequence for state messages.
-- `ts`: sender timestamp in milliseconds.
+- `ts`: server timestamp in milliseconds on accepted and server-generated messages.
 - `id`: server-assigned player ID on server-to-client messages.
 - `p`: position `[x, y, z]`.
 - `q`: quaternion `[x, y, z, w]`.
@@ -91,7 +91,7 @@ Remain the transport boundary. It owns connection lifecycle, binary MessagePack 
 
 ### `Multiplayer`
 
-Own local state publication and route incoming protocol messages. It waits until the asynchronous game initialization has produced the physical vehicle and vehicle template, then starts publishing at 12 Hz.
+Own local state publication and route incoming protocol messages. It waits until the asynchronous game initialization has produced the physical vehicle and local visual chassis, resolves that chassis as the remote clone template, then publishes at 12 Hz.
 
 ### `RemotePlayers`
 
@@ -103,7 +103,7 @@ Store a bounded ordered history per player. Render approximately 100 ms behind t
 
 ### `RemoteVehicle`
 
-Clone a vehicle template captured before the local `VisualVehicle` consumes the resource scene. It renders only and never creates Rapier bodies. It discovers the four SU7 wheel nodes, applies chassis transform, front-wheel steering, wheel roll and brake-light visibility.
+Clone the loaded local visual chassis after `VisualVehicle` has completed its setup. It renders only and never creates Rapier bodies. It discovers the four SU7 wheel nodes, applies chassis transform, front-wheel steering, wheel roll and brake-light visibility.
 
 ## Cloudflare Components
 
@@ -141,15 +141,15 @@ Worker configuration uses a SQLite-backed Durable Object class and the current d
 - A failed socket must not affect local driving.
 - Reconnect delay increases up to 15 seconds and resets after a successful connection.
 - Remote vehicles are removed immediately on transport disconnect to avoid stale cars.
-- Invalid or oversized client messages receive an error; repeated rate-limit violations close the socket.
+- Invalid client messages receive an error; oversized or rate-limited clients are closed.
 - A remote player with only one snapshot renders at that snapshot; stale snapshots do not rewind the car.
 
 ## Testing
 
 - Protocol accepts valid state and rejects invalid/non-finite fields.
 - Snapshot buffer ignores stale sequence numbers and interpolates position/quaternion correctly.
-- Frontend integration source constructs multiplayer and captures the vehicle template before `world.step(1)`.
-- Worker codec and state sanitizer tests run with Node/Vitest-compatible pure functions.
+- Frontend integration source constructs multiplayer, keeps it optional and resolves the loaded visual chassis as the remote template.
+- Worker codec, state sanitizer and rate limiter tests run with Vitest-compatible pure functions.
 - Existing JavaScript tests and production build remain part of CI.
 
 ## Acceptance Criteria
