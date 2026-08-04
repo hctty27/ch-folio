@@ -18,6 +18,7 @@ export class Multiplayer
         this.clockOffset = 0
         this.sequence = 0
         this.lastSentAt = -Infinity
+        this.invalidStateWarned = false
 
         this.tickCallback = () => this.update()
         this.messageCallback = (message) => this.onMessage(message)
@@ -88,6 +89,7 @@ export class Multiplayer
     {
         this.sequence = 0
         this.lastSentAt = -Infinity
+        this.invalidStateWarned = false
     }
 
     onDisconnected()
@@ -183,17 +185,30 @@ export class Multiplayer
         if(!vehicle || !player)
             return false
 
-        const message = createStateMessage({
-            sequence: ++this.sequence,
-            timestamp: Date.now(),
-            position: vehicle.position.toArray(),
-            quaternion: vehicle.quaternion.toArray(),
-            steering: player.steering,
-            forwardSpeed: vehicle.forwardSpeed,
-            flags: this.createFlags(),
-        })
+        try
+        {
+            const message = createStateMessage({
+                sequence: ++this.sequence,
+                timestamp: Date.now(),
+                position: vehicle.position.toArray(),
+                quaternion: vehicle.quaternion.toArray(),
+                steering: player.steering,
+                forwardSpeed: vehicle.forwardSpeed,
+                flags: this.createFlags(),
+            })
 
-        return this.game.server.send(message)
+            this.invalidStateWarned = false
+            return this.game.server.send(message)
+        }
+        catch(error)
+        {
+            if(!this.invalidStateWarned)
+            {
+                console.warn('[Multiplayer] skipped invalid local vehicle state', error)
+                this.invalidStateWarned = true
+            }
+            return false
+        }
     }
 
     update()
