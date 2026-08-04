@@ -4,11 +4,14 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "vite --mode development",
-    "build": "vite build --mode production",
+    "prepare:cockpit": "node scripts/generate-cockpit-config.mjs",
+    "dev": "npm run prepare:cockpit && vite --mode development",
+    "build": "npm run prepare:cockpit && vite build --mode production",
     "preview": "vite preview",
     "compress": "node scripts/compress.js static/",
-    "test:vehicle": "node --test scripts/test_materialize_vehicle.mjs"
+    "test": "node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs",
+    "test:vehicle": "node --test scripts/test_materialize_vehicle.mjs",
+    "test:cockpit": "node --test scripts/test_cockpit_pose.mjs"
   },
   "author": "",
   "license": "ISC",
@@ -33,7 +36,6 @@
     "seedrandom": "^3.0.5",
     "sharp": "^0.34.5",
     "stats-gl": "^3.6.0",
-    "stylus": "^0.64.0",
     "three": "^0.183.2",
     "tweakpane": "^4.0.4",
     "uuid": "^11.1.0",
