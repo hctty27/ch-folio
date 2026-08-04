@@ -4,15 +4,20 @@ const Y_AXIS = new Vector3(0, 1, 0)
 
 export const COCKPIT_VIEW_MODE = 3
 export const COCKPIT_CAMERA_SETTINGS = Object.freeze({
-    fov: 68,
+    fov: 70,
     near: 0.03,
     zoom: 1,
 })
+export const COCKPIT_GLASS_SETTINGS = Object.freeze({
+    doubleSided: true,
+    depthWrite: false,
+    forceSinglePass: true,
+})
 
-// Balanced fallback framing for the current SU7 asset:
-// road remains dominant while the lower edge retains a small amount of cabin/bodywork.
-export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.70, -0.42)
-export const DEFAULT_COCKPIT_REST_PITCH = - Math.PI / 30
+// Place the fallback eye point behind the front windshield so the glass/frame
+// remains visible while the road still dominates the composition.
+export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(-0.12, 0.68, -0.42)
+export const DEFAULT_COCKPIT_REST_PITCH = - Math.PI / 36
 
 export const DEFAULT_COCKPIT_FORWARD_CORRECTION = new Quaternion()
     .setFromAxisAngle(Y_AXIS, - Math.PI * 0.5)
