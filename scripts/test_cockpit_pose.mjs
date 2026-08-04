@@ -4,6 +4,8 @@ import test from 'node:test'
 import { Euler, Quaternion, Vector3 } from 'three'
 
 import {
+    COCKPIT_CAMERA_SETTINGS,
+    COCKPIT_VIEW_MODE,
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
     DEFAULT_COCKPIT_REST_PITCH,
     DEFAULT_PHYSICAL_COCKPIT_POSITION,
@@ -50,6 +52,40 @@ test('computeCockpitPose rotates the driver offset into vehicle world space', ()
     vectorCloseTo(pose.position, new Vector3(10, 0, 19))
 })
 
+test('rigid cockpit pose follows vehicle translation exactly', () =>
+{
+    const localPosition = new Vector3(0.25, 0.78, -0.42)
+    const vehicleQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.65)
+    const firstVehiclePosition = new Vector3(2, 3, 4)
+    const secondVehiclePosition = new Vector3(7, 1, -2)
+
+    const firstPose = computeCockpitPose({
+        vehiclePosition: firstVehiclePosition,
+        vehicleQuaternion,
+        localPosition,
+    })
+    const secondPose = computeCockpitPose({
+        vehiclePosition: secondVehiclePosition,
+        vehicleQuaternion,
+        localPosition,
+    })
+
+    vectorCloseTo(
+        secondPose.position.clone().sub(firstPose.position),
+        secondVehiclePosition.clone().sub(firstVehiclePosition),
+    )
+})
+
+test('cockpit uses an isolated view mode and a fixed projection', () =>
+{
+    assert.equal(COCKPIT_VIEW_MODE, 3)
+    assert.deepEqual(COCKPIT_CAMERA_SETTINGS, {
+        fov: 62,
+        near: 0.03,
+        zoom: 1,
+    })
+})
+
 test('default correction points a Three.js camera toward the vehicle positive X axis', () =>
 {
     const pose = computeCockpitPose({
@@ -67,8 +103,8 @@ test('physical fallback stays between the axles and on the driver side', () =>
 {
     assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.x > -0.9)
     assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.x < 0.9)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y > 0.4)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y < 0.8)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y > 0.55)
+    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y < 1)
     assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.z < 0)
     assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.z > -0.75)
 })
