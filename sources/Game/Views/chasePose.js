@@ -13,7 +13,7 @@ export const CHASE_CAMERA_SETTINGS = Object.freeze({
     distance: 7,
     minDistance: 4.5,
     maxDistance: 11,
-    height: 2.8,
+    height: 3.4,
     lookAhead: 3,
     targetHeight: 0.9,
     positionDamping: 7,

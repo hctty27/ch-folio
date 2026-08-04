@@ -54,7 +54,7 @@ test('default chase pose is behind and above a positive-X vehicle', () =>
         targetHeight: CHASE_CAMERA_SETTINGS.targetHeight,
     })
 
-    vectorCloseTo(pose.position, new Vector3(-7, 2.8, 0))
+    vectorCloseTo(pose.position, new Vector3(-7, 3.4, 0))
     vectorCloseTo(pose.target, new Vector3(3, 0.9, 0))
 })
 
@@ -156,7 +156,7 @@ test('chase camera constants match the external view contract', () =>
         distance: 7,
         minDistance: 4.5,
         maxDistance: 11,
-        height: 2.8,
+        height: 3.4,
         lookAhead: 3,
         targetHeight: 0.9,
         positionDamping: 7,
