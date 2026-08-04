@@ -13,8 +13,7 @@ export class CameraModeController
         this.cockpitView = cockpitView
         this.mode = CAMERA_MODES.DEFAULT
         this.suspendedByCinematic = false
-
-        this.resolveInputConflicts()
+        this.inputConflictsResolved = this.resolveInputConflicts()
 
         this.onCameraToggle = (action) =>
         {
@@ -37,7 +36,7 @@ export class CameraModeController
     {
         const zoomToggleAction = this.game.inputs.actions.get('zoomToggle')
         if(!zoomToggleAction)
-            return
+            return false
 
         zoomToggleAction.keys = zoomToggleAction.keys.filter(
             (key) => key !== 'Gamepad.r3',
@@ -50,6 +49,8 @@ export class CameraModeController
             zoomToggleAction.value = 0
             zoomToggleAction.trigger = null
         }
+
+        return true
     }
 
     cycle()
@@ -111,6 +112,9 @@ export class CameraModeController
 
     update()
     {
+        if(!this.inputConflictsResolved)
+            this.inputConflictsResolved = this.resolveInputConflicts()
+
         const cinematicActive = this.game.view?.cinematic?.active
 
         if(cinematicActive)
