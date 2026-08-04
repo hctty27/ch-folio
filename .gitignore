@@ -6,4 +6,6 @@ dist
 .env*
 .autosave
 .wav
+.wrangler
+multiplayer-worker/worker-configuration.d.ts
 !static/sounds/music/*.wav
