@@ -5,6 +5,7 @@ import { Euler, Quaternion, Vector3 } from 'three'
 
 import {
     COCKPIT_CAMERA_SETTINGS,
+    COCKPIT_GLASS_SETTINGS,
     COCKPIT_VIEW_MODE,
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
     DEFAULT_COCKPIT_REST_PITCH,
@@ -54,7 +55,7 @@ test('computeCockpitPose rotates the driver offset into vehicle world space', ()
 
 test('rigid cockpit pose follows vehicle translation exactly', () =>
 {
-    const localPosition = new Vector3(0.12, 0.70, -0.42)
+    const localPosition = new Vector3(-0.12, 0.68, -0.42)
     const vehicleQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.65)
     const firstVehiclePosition = new Vector3(2, 3, 4)
     const secondVehiclePosition = new Vector3(7, 1, -2)
@@ -76,13 +77,22 @@ test('rigid cockpit pose follows vehicle translation exactly', () =>
     )
 })
 
-test('cockpit uses an isolated view mode and a fixed balanced projection', () =>
+test('cockpit uses an isolated view mode and a fixed windshield-friendly projection', () =>
 {
     assert.equal(COCKPIT_VIEW_MODE, 3)
     assert.deepEqual(COCKPIT_CAMERA_SETTINGS, {
-        fov: 68,
+        fov: 70,
         near: 0.03,
         zoom: 1,
+    })
+})
+
+test('cockpit glass stays visible from inside without writing depth', () =>
+{
+    assert.deepEqual(COCKPIT_GLASS_SETTINGS, {
+        doubleSided: true,
+        depthWrite: false,
+        forceSinglePass: true,
     })
 })
 
@@ -99,10 +109,10 @@ test('default correction points a Three.js camera toward the vehicle positive X 
     vectorCloseTo(cameraForward, new Vector3(1, 0, 0))
 })
 
-test('physical fallback is at eye height while retaining lower cabin framing', () =>
+test('physical fallback sits behind the windshield at driver eye height', () =>
 {
-    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.x, 0.12)
-    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.y, 0.70)
+    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.x, -0.12)
+    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.y, 0.68)
     closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.z, -0.42)
 })
 
@@ -121,7 +131,7 @@ test('fallback rest pitch looks forward and slightly toward the road', () =>
 
     assert.ok(cameraForward.x > 0.99)
     assert.ok(cameraForward.y < -0.07)
-    assert.ok(cameraForward.y > -0.12)
+    assert.ok(cameraForward.y > -0.11)
     assert.ok(Math.abs(cameraForward.z) < 1e-9)
 })
 
