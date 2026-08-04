@@ -2,7 +2,7 @@ name: Verify
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/three-camera-modes]
   workflow_dispatch:
 
 permissions:
