@@ -1,6 +1,7 @@
 import './localization/zh-CN.js'
 import './threejs-override.js'
 import { Game } from './Game/Game.js'
+import { Multiplayer } from './Game/Multiplayer/Multiplayer.js'
 import { CameraModeController } from './Game/Views/CameraModeController.js'
 import { ChaseView } from './Game/Views/ChaseView.js'
 import { CockpitView } from './Game/Views/CockpitView.js'
@@ -23,6 +24,13 @@ const cameraModeController = new CameraModeController(game, {
     cockpitView,
 })
 const su7FourWheelController = new SU7FourWheelController(game)
+const multiplayer = new Multiplayer(game)
+const multiplayerEnabled = [ '1', 'true' ].includes(
+    String(import.meta.env.VITE_MULTIPLAYER_ENABLED).toLowerCase(),
+)
+
+if(multiplayerEnabled && import.meta.env.VITE_SERVER_URL)
+    multiplayer.start()
 
 if(import.meta.env.VITE_GAME_PUBLIC)
 {
@@ -31,4 +39,5 @@ if(import.meta.env.VITE_GAME_PUBLIC)
     window.chaseView = chaseView
     window.cameraModeController = cameraModeController
     window.su7FourWheelController = su7FourWheelController
+    window.multiplayer = multiplayer
 }
