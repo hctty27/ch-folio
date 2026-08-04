@@ -6,6 +6,7 @@ import { Quaternion, Vector3 } from 'three'
 import {
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
     computeCockpitPose,
+    dampCockpitPose,
     dampingAlpha,
 } from '../sources/Game/Views/cockpitPose.js'
 
@@ -85,4 +86,36 @@ test('dampingAlpha is frame-rate independent and bounded', () =>
     assert.ok(dampingAlpha(10, 1 / 60) > 0)
     assert.ok(dampingAlpha(10, 1 / 60) < 1)
     closeTo(dampingAlpha(10, 1 / 30), 1 - (1 - dampingAlpha(10, 1 / 60)) ** 2)
+})
+
+test('dampCockpitPose advances from its persistent pose instead of a reset camera pose', () =>
+{
+    const position = new Vector3()
+    const quaternion = new Quaternion()
+    const targetPosition = new Vector3(1, 0, 0)
+    const targetQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI * 0.5)
+    const halfLifeDamping = Math.log(2)
+
+    dampCockpitPose({
+        position,
+        quaternion,
+        targetPosition,
+        targetQuaternion,
+        positionDamping: halfLifeDamping,
+        rotationDamping: halfLifeDamping,
+        delta: 1,
+    })
+    closeTo(position.x, 0.5)
+
+    dampCockpitPose({
+        position,
+        quaternion,
+        targetPosition,
+        targetQuaternion,
+        positionDamping: halfLifeDamping,
+        rotationDamping: halfLifeDamping,
+        delta: 1,
+    })
+    closeTo(position.x, 0.75)
+    closeTo(quaternion.angleTo(targetQuaternion), Math.PI * 0.125)
 })
