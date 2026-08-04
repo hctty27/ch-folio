@@ -101,8 +101,12 @@ describe('MessagePack transport', () =>
             t: MESSAGE_TYPES.PING,
             ts: 123,
         }
+        const encoded = encodeMessage(message)
+        const frame = encoded.buffer.slice(
+            encoded.byteOffset,
+            encoded.byteOffset + encoded.byteLength,
+        ) as ArrayBuffer
 
-        const decoded = decodeMessage(encodeMessage(message).buffer as ArrayBuffer)
-        expect(decoded).toEqual(message)
+        expect(decodeMessage(frame)).toEqual(message)
     })
 })
