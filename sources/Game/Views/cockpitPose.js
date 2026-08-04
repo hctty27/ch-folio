@@ -9,8 +9,8 @@ export const COCKPIT_CAMERA_SETTINGS = Object.freeze({
     zoom: 1,
 })
 
-// Keep the current longitudinal position and eye height while centering laterally.
-export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.68, 0)
+// Lower the centered eye point to move it away from the roof edge.
+export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.62, 0)
 export const DEFAULT_COCKPIT_REST_PITCH = - Math.PI / 30
 
 export const DEFAULT_COCKPIT_FORWARD_CORRECTION = new Quaternion()
