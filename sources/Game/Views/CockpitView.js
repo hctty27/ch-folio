@@ -27,7 +27,6 @@ export class CockpitView
         this.active = false
         this.ready = false
         this.pendingActivation = false
-        this.inputConflictsResolved = false
 
         this.settings = {
             ...COCKPIT_CAMERA_SETTINGS,
@@ -80,31 +79,13 @@ export class CockpitView
         this.savedDofStrength = null
         this.savedZoomBaseRatio = null
 
-        this.onCameraToggle = (action) =>
-        {
-            if(action.active)
-                this.toggle()
-        }
-
         this.preTickCallback = () =>
         {
             if(this.active && this.game.view?.focusPoint)
                 this.game.view.focusPoint.isTracking = true
         }
 
-        this.tickCallback = () =>
-        {
-            this.update()
-        }
-
-        this.game.inputs.addActions([
-            {
-                name: 'cameraToggle',
-                categories: [ 'wandering', 'racing' ],
-                keys: [ 'Keyboard.KeyC', 'Gamepad.r3' ],
-            },
-        ])
-        this.game.inputs.events.on('cameraToggle', this.onCameraToggle)
+        this.tickCallback = () => this.update()
 
         this.installPointerControls()
         this.game.ticker.events.on('tick', this.preTickCallback, 0)
@@ -168,30 +149,6 @@ export class CockpitView
         window.addEventListener('pointercancel', this.onPointerUp)
     }
 
-    resolveInputConflicts()
-    {
-        if(this.inputConflictsResolved || !this.game.view)
-            return
-
-        this.game.view.constructor.MODE_COCKPIT = COCKPIT_VIEW_MODE
-
-        const zoomToggleAction = this.game.inputs.actions.get('zoomToggle')
-        if(zoomToggleAction)
-        {
-            zoomToggleAction.keys = zoomToggleAction.keys.filter((key) => key !== 'Gamepad.r3')
-            zoomToggleAction.activeKeys?.delete('Gamepad.r3')
-
-            if(zoomToggleAction.activeKeys?.size === 0)
-            {
-                zoomToggleAction.active = false
-                zoomToggleAction.value = 0
-                zoomToggleAction.trigger = null
-            }
-        }
-
-        this.inputConflictsResolved = true
-    }
-
     tryInitialize()
     {
         const chassis = this.game.world?.visualVehicle?.parts?.chassis
@@ -199,7 +156,6 @@ export class CockpitView
         if(!chassis || !this.game.physicalVehicle || !this.game.view)
             return false
 
-        this.resolveInputConflicts()
         this.chassis = chassis
         this.chassis.updateMatrixWorld(true)
 
@@ -320,22 +276,24 @@ export class CockpitView
 
     toggle()
     {
-        if(!this.ready && !this.tryInitialize())
-        {
-            this.pendingActivation = !this.pendingActivation
-            return
-        }
-
-        if(this.active)
-            this.exit()
-        else
-            this.enter()
+        return this.active
+            ? this.exit()
+            : this.enter()
     }
 
     enter()
     {
-        if(this.active || !this.ready || this.game.view.cinematic?.active)
-            return
+        if(this.active)
+            return true
+
+        if(this.game.view?.cinematic?.active)
+            return false
+
+        if(!this.ready && !this.tryInitialize())
+        {
+            this.pendingActivation = true
+            return false
+        }
 
         const view = this.game.view
         const camera = view.camera
@@ -372,16 +330,20 @@ export class CockpitView
 
         document.documentElement.classList.add('is-cockpit-view')
         this.updatePose()
+
+        return true
     }
 
     exit()
     {
+        this.pendingActivation = false
+
         if(!this.active)
-            return
+            return false
 
         this.active = false
-        this.pointer.id = null
         this.look.interacting = false
+        this.releasePointer()
 
         const view = this.game.view
         const camera = view.camera
@@ -419,6 +381,16 @@ export class CockpitView
         }
 
         document.documentElement.classList.remove('is-cockpit-view')
+        return true
+    }
+
+    releasePointer()
+    {
+        if(this.pointer.id === null)
+            return
+
+        this.game.canvasElement.releasePointerCapture?.(this.pointer.id)
+        this.pointer.id = null
     }
 
     update()
@@ -428,14 +400,8 @@ export class CockpitView
 
         this.updateSteeringWheel()
 
-        if(!this.active)
+        if(!this.active || this.game.view.cinematic?.active)
             return
-
-        if(this.game.view.cinematic?.active)
-        {
-            this.exit()
-            return
-        }
 
         this.updateGamepadLook()
         this.updateLookReturn()
