@@ -27,6 +27,30 @@ function readGlbJson(buffer)
     throw new Error('GLB JSON chunk not found')
 }
 
+function meshDetails(document, meshIndex)
+{
+    if(meshIndex === undefined)
+        return null
+
+    const mesh = document.meshes?.[meshIndex]
+    return (mesh?.primitives ?? []).map((primitive) =>
+    {
+        const accessorIndex = primitive.attributes?.POSITION
+        const accessor = document.accessors?.[accessorIndex]
+        const material = document.materials?.[primitive.material]
+        const min = accessor?.min ?? null
+        const max = accessor?.max ?? null
+        const extents = min && max ? max.map((value, axis) => value - min[axis]) : null
+        return {
+            material: material?.name ?? null,
+            positionAccessor: accessorIndex ?? null,
+            min,
+            max,
+            extents,
+        }
+    })
+}
+
 function printNodeTree(document)
 {
     const nodes = document.nodes ?? []
@@ -49,6 +73,7 @@ function printNodeTree(document)
                 rotation: node.rotation ?? [0, 0, 0, 1],
                 scale: node.scale ?? [1, 1, 1],
                 children: node.children ?? [],
+                primitives: meshDetails(document, node.mesh),
             }))
         }
 
