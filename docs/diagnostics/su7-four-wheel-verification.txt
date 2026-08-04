@@ -1,0 +1,240 @@
+commit=061f3e7fceb98e9a8bf5ebf8248d7a74a65ba655
+node=v22.23.1
+python=Python 3.12.13
+
+### python -m pip install -r scripts/requirements-su7.txt
+Collecting numpy<3,>=2.0 (from -r scripts/requirements-su7.txt (line 1))
+  Downloading numpy-2.5.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting Pillow<13,>=10 (from -r scripts/requirements-su7.txt (line 2))
+  Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Collecting trimesh==4.11.1 (from -r scripts/requirements-su7.txt (line 3))
+  Downloading trimesh-4.11.1-py3-none-any.whl.metadata (13 kB)
+Downloading trimesh-4.11.1-py3-none-any.whl (740 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 740.4/740.4 kB 71.5 MB/s  0:00:00
+Downloading numpy-2.5.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 306.8 MB/s  0:00:00
+Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 338.6 MB/s  0:00:00
+Installing collected packages: Pillow, numpy, trimesh
+
+Successfully installed Pillow-12.3.0 numpy-2.5.1 trimesh-4.11.1
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2
+[notice] To update, run: pip install --upgrade pip
+exit=0
+
+### npm clean-install --progress=false
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: vite-plugin-restart@0.4.1
+npm error Found: vite@7.2.4
+npm error node_modules/vite
+npm error   vite@"^7.2.4" from the root project
+npm error   peer vite@"^6.0.0 || ^7.0.0" from @vitejs/plugin-basic-ssl@2.1.0
+npm error   node_modules/@vitejs/plugin-basic-ssl
+npm error     @vitejs/plugin-basic-ssl@"^2.1.0" from the root project
+npm error   3 more (vite-plugin-node-polyfills, ...)
+npm error
+npm error Could not resolve dependency:
+npm error peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
+npm error node_modules/vite-plugin-restart
+npm error   vite-plugin-restart@"^0.4.1" from the root project
+npm error
+npm error Conflicting peer dependency: vite@5.4.21
+npm error node_modules/vite
+npm error   peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
+npm error   node_modules/vite-plugin-restart
+npm error     vite-plugin-restart@"^0.4.1" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/runner/.npm/_logs/2026-08-04T09_23_10_700Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_23_10_700Z-debug-0.log
+exit=1
+
+### npm test
+
+> bruno-simon-folio-2025@0.0.0 test
+> npm run test:js && npm run test:su7-convert
+
+
+> bruno-simon-folio-2025@0.0.0 test:js
+> node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs
+
+TAP version 13
+# node:internal/modules/package_json_reader:314
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'three' imported from /home/runner/work/ch-folio/ch-folio/scripts/test_cockpit_pose.mjs
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:314:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:855:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:985:11)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.23.1
+# Subtest: scripts/test_cockpit_pose.mjs
+not ok 1 - scripts/test_cockpit_pose.mjs
+  ---
+  duration_ms: 55.307269
+  type: 'test'
+  location: '/home/runner/work/ch-folio/ch-folio/scripts/test_cockpit_pose.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: materializeVehicle joins ordered chunks and writes both GLB targets
+ok 2 - materializeVehicle joins ordered chunks and writes both GLB targets
+  ---
+  duration_ms: 15.297933
+  type: 'test'
+  ...
+# Subtest: materializeVehicle rejects an incomplete chunk sequence before decompression
+ok 3 - materializeVehicle rejects an incomplete chunk sequence before decompression
+  ---
+  duration_ms: 2.770526
+  type: 'test'
+  ...
+# [SU7FourWheelController] using four independent SU7 wheel nodes
+# [SU7FourWheelController] using four independent SU7 wheel nodes
+# [SU7FourWheelController] using four independent SU7 wheel nodes
+# Subtest: hides legacy clones and drives four SU7 wheel roots
+ok 4 - hides legacy clones and drives four SU7 wheel roots
+  ---
+  duration_ms: 3.626738
+  type: 'test'
+  ...
+# Subtest: uses the same roll direction for all normalized wheel pivots
+ok 5 - uses the same roll direction for all normalized wheel pivots
+  ---
+  duration_ms: 2.081286
+  type: 'test'
+  ...
+# Subtest: only front wheels receive steering rotation
+ok 6 - only front wheels receive steering rotation
+  ---
+  duration_ms: 0.567322
+  type: 'test'
+  ...
+# Subtest: creates four independent wheel roots in physical wheel order
+ok 7 - creates four independent wheel roots in physical wheel order
+  ---
+  duration_ms: 4.062404
+  type: 'test'
+  ...
+# Subtest: keeps rolling meshes below roll pivot and brake meshes outside it
+ok 8 - keeps rolling meshes below roll pivot and brake meshes outside it
+  ---
+  duration_ms: 0.902279
+  type: 'test'
+  ...
+# Subtest: corrects non-uniform rolling-plane scale before wheel rotation
+ok 9 - corrects non-uniform rolling-plane scale before wheel rotation
+  ---
+  duration_ms: 0.751637
+  type: 'test'
+  ...
+# Subtest: bakes non-Z source axle into a dedicated correction node
+ok 10 - bakes non-Z source axle into a dedicated correction node
+  ---
+  duration_ms: 0.540752
+  type: 'test'
+  ...
+# Subtest: is idempotent and preserves the legacy template for fallback
+ok 11 - is idempotent and preserves the legacy template for fallback
+  ---
+  duration_ms: 1.158919
+  type: 'test'
+  ...
+# Subtest: rewrites only the JSON chunk and preserves binary bytes
+ok 12 - rewrites only the JSON chunk and preserves binary bytes
+  ---
+  duration_ms: 1.140465
+  type: 'test'
+  ...
+# Subtest: discovers SU7 wheel nodes in physical wheel index order
+ok 13 - discovers SU7 wheel nodes in physical wheel index order
+  ---
+  duration_ms: 1.772959
+  type: 'test'
+  ...
+# Subtest: falls back atomically when any required SU7 wheel node is missing
+ok 14 - falls back atomically when any required SU7 wheel node is missing
+  ---
+  duration_ms: 0.385301
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 13
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 146.957057
+exit=1
+
+### npm run build
+
+> bruno-simon-folio-2025@0.0.0 prebuild
+> npm install --no-save --package-lock=true --ignore-scripts --prefer-offline --audit=false --fund=false stylus@0.64.0
+
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: vite-plugin-restart@0.4.1
+npm error Found: vite@7.2.4
+npm error node_modules/vite
+npm error   peer vite@"^6.0.0 || ^7.0.0" from @vitejs/plugin-basic-ssl@2.1.0
+npm error   node_modules/@vitejs/plugin-basic-ssl
+npm error     @vitejs/plugin-basic-ssl@"^2.1.0" from the root project
+npm error   peer vite@"^2.0.0 || ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" from vite-plugin-node-polyfills@0.24.0
+npm error   node_modules/vite-plugin-node-polyfills
+npm error     vite-plugin-node-polyfills@"^0.24.0" from the root project
+npm error   3 more (vite-plugin-top-level-await, vite-plugin-wasm, the root project)
+npm error
+npm error Could not resolve dependency:
+npm error peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
+npm error node_modules/vite-plugin-restart
+npm error   vite-plugin-restart@"^0.4.1" from the root project
+npm error
+npm error Conflicting peer dependency: vite@5.4.21
+npm error node_modules/vite
+npm error   peer vite@"^2.9.0 || ^3.0.0 || ^4.0.0 || ^5.0.0" from vite-plugin-restart@0.4.1
+npm error   node_modules/vite-plugin-restart
+npm error     vite-plugin-restart@"^0.4.1" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/runner/.npm/_logs/2026-08-04T09_23_13_891Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_23_13_891Z-debug-0.log
+exit=1
+
+### node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
+{"input":"/home/runner/work/ch-folio/ch-folio/static/vehicle/default.glb","nodes":18,"meshes":14,"materials":11}
+{"depth":1,"index":1,"name":"chassis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[2,3,4,5,6,7,8,9,10,11,12],"primitives":null}
+{"depth":2,"index":2,"name":"bodyPainted","mesh":0,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_paint","positionAccessor":1,"min":[-1.4906692504882812,-0.6610304713249207,-0.97850501537323],"max":[1.4836684465408325,0.6517991423606873,0.9785072207450867],"extents":[2.9743376970291138,1.312829613685608,1.9570122361183167]}]}
+{"depth":2,"index":12,"name":"wheelContainer","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[13],"primitives":null}
+{"depth":3,"index":13,"name":"wheelCylinder","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[14,15,16,17],"primitives":null}
+{"depth":4,"index":14,"name":"wheelPainted","mesh":10,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":32,"min":[-0.21491631865501404,-0.39999353885650635,-0.10953069478273392],"max":[0.21490725874900818,0.40004000067710876,0.10415565222501755],"extents":[0.4298235774040222,0.8000335395336151,0.21368634700775146]}]}
+{"depth":4,"index":15,"name":"wheelPart_Mesh75","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_brake","positionAccessor":35,"min":[-0.10242651402950287,-0.19067169725894928,-0.017711909487843513],"max":[0.1024310514330864,0.1906333565711975,0.03242853283882141],"extents":[0.20485756546258926,0.3813050538301468,0.050140442326664925]}]}
+{"depth":4,"index":16,"name":"wheelPart_Mesh76","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_wheel","positionAccessor":38,"min":[-0.16718348860740662,-0.31120848655700684,-0.10817764699459076],"max":[0.16718801856040955,0.3111605942249298,0.10426434129476547],"extents":[0.33437150716781616,0.6223690807819366,0.21244198828935623]}]}
+{"depth":4,"index":17,"name":"wheelPart_Mesh77","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":41,"min":[-0.20370586216449738,-0.3791452944278717,-0.11241646111011505],"max":[0.20370586216449738,0.3791850805282593,0.10698818415403366],"extents":[0.40741172432899475,0.758330374956131,0.2194046452641487]}]}
+exit=0
+overall_exit=1
