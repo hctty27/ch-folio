@@ -2,6 +2,9 @@ import { Quaternion, Vector3 } from 'three'
 
 const Y_AXIS = new Vector3(0, 1, 0)
 
+export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.58, -0.36)
+export const DEFAULT_COCKPIT_REST_PITCH = - Math.PI / 24
+
 export const DEFAULT_COCKPIT_FORWARD_CORRECTION = new Quaternion()
     .setFromAxisAngle(Y_AXIS, - Math.PI * 0.5)
 
