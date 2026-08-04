@@ -54,7 +54,7 @@ test('computeCockpitPose rotates the driver offset into vehicle world space', ()
 
 test('rigid cockpit pose follows vehicle translation exactly', () =>
 {
-    const localPosition = new Vector3(0.25, 0.78, -0.42)
+    const localPosition = new Vector3(0.12, 0.70, -0.42)
     const vehicleQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.65)
     const firstVehiclePosition = new Vector3(2, 3, 4)
     const secondVehiclePosition = new Vector3(7, 1, -2)
@@ -76,11 +76,11 @@ test('rigid cockpit pose follows vehicle translation exactly', () =>
     )
 })
 
-test('cockpit uses an isolated view mode and a fixed projection', () =>
+test('cockpit uses an isolated view mode and a fixed balanced projection', () =>
 {
     assert.equal(COCKPIT_VIEW_MODE, 3)
     assert.deepEqual(COCKPIT_CAMERA_SETTINGS, {
-        fov: 62,
+        fov: 68,
         near: 0.03,
         zoom: 1,
     })
@@ -99,14 +99,11 @@ test('default correction points a Three.js camera toward the vehicle positive X 
     vectorCloseTo(cameraForward, new Vector3(1, 0, 0))
 })
 
-test('physical fallback stays between the axles and on the driver side', () =>
+test('physical fallback is at eye height while retaining lower cabin framing', () =>
 {
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.x > -0.9)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.x < 0.9)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y > 0.55)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.y < 1)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.z < 0)
-    assert.ok(DEFAULT_PHYSICAL_COCKPIT_POSITION.z > -0.75)
+    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.x, 0.12)
+    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.y, 0.70)
+    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.z, -0.42)
 })
 
 test('fallback rest pitch looks forward and slightly toward the road', () =>
@@ -122,8 +119,9 @@ test('fallback rest pitch looks forward and slightly toward the road', () =>
     })
     const cameraForward = new Vector3(0, 0, -1).applyQuaternion(pose.quaternion)
 
-    assert.ok(cameraForward.x > 0.98)
-    assert.ok(cameraForward.y < -0.05)
+    assert.ok(cameraForward.x > 0.99)
+    assert.ok(cameraForward.y < -0.07)
+    assert.ok(cameraForward.y > -0.12)
     assert.ok(Math.abs(cameraForward.z) < 1e-9)
 })
 
