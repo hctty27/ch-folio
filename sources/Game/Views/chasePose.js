@@ -13,7 +13,8 @@ export const CHASE_CAMERA_SETTINGS = Object.freeze({
     distance: 7,
     minDistance: 4.5,
     maxDistance: 11,
-    height: 3.4,
+    height: 2.8,
+    overlookPitch: Math.PI / 18,
     lookAhead: 3,
     targetHeight: 0.9,
     positionDamping: 7,
@@ -43,6 +44,7 @@ export function computeChasePose({
     targetHeight,
     yaw = 0,
     pitch = 0,
+    overlookPitch = CHASE_CAMERA_SETTINGS.overlookPitch,
 })
 {
     const forward = FORWARD_AXIS.clone().applyQuaternion(vehicleQuaternion)
@@ -54,8 +56,9 @@ export function computeChasePose({
         forward.normalize()
 
     const right = new Vector3(-forward.z, 0, forward.x)
-    const horizontalDistance = distance * Math.cos(pitch)
-    const verticalOrbit = distance * Math.sin(pitch)
+    const effectivePitch = pitch + overlookPitch
+    const horizontalDistance = distance * Math.cos(effectivePitch)
+    const verticalOrbit = distance * Math.sin(effectivePitch)
 
     const position = vehiclePosition
         .clone()
