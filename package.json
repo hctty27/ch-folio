@@ -4,8 +4,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/materialize-vehicle.js && vite --mode development",
-    "build": "node scripts/materialize-vehicle.js && vite build --mode production",
+    "dev": "vite --mode development",
+    "build": "vite build --mode production",
     "preview": "vite preview",
     "compress": "node scripts/compress.js static/",
     "test:vehicle": "node --test scripts/test_materialize_vehicle.mjs"
