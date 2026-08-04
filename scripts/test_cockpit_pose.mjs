@@ -54,7 +54,7 @@ test('computeCockpitPose rotates the driver offset into vehicle world space', ()
 
 test('rigid cockpit pose follows vehicle translation exactly', () =>
 {
-    const localPosition = new Vector3(0.12, 0.68, 0)
+    const localPosition = new Vector3(0.12, 0.62, 0)
     const vehicleQuaternion = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.65)
     const firstVehiclePosition = new Vector3(2, 3, 4)
     const secondVehiclePosition = new Vector3(7, 1, -2)
@@ -99,10 +99,10 @@ test('default correction points a Three.js camera toward the vehicle positive X 
     vectorCloseTo(cameraForward, new Vector3(1, 0, 0))
 })
 
-test('physical fallback is centered laterally at the chosen eye height', () =>
+test('physical fallback is centered laterally and lowered to clear the roof edge', () =>
 {
     closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.x, 0.12)
-    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.y, 0.68)
+    closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.y, 0.62)
     closeTo(DEFAULT_PHYSICAL_COCKPIT_POSITION.z, 0)
 })
 
