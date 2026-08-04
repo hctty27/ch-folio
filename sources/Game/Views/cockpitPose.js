@@ -9,9 +9,8 @@ export const COCKPIT_CAMERA_SETTINGS = Object.freeze({
     zoom: 1,
 })
 
-// Balanced fallback framing for the current SU7 asset:
-// road remains dominant while the lower edge retains a small amount of cabin/bodywork.
-export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.70, -0.42)
+// Keep the same longitudinal and lateral placement while lowering the eye point slightly.
+export const DEFAULT_PHYSICAL_COCKPIT_POSITION = new Vector3(0.12, 0.68, -0.42)
 export const DEFAULT_COCKPIT_REST_PITCH = - Math.PI / 30
 
 export const DEFAULT_COCKPIT_FORWARD_CORRECTION = new Quaternion()
