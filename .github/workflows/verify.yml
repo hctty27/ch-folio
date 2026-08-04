@@ -3,6 +3,8 @@ name: Verify
 on:
   push:
     branches: [main, feat/three-camera-modes]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
