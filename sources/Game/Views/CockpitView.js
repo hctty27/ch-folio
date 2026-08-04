@@ -2,6 +2,8 @@ import * as THREE from 'three/webgpu'
 import cockpitConfig from '../../data/cockpit.generated.json'
 import {
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
+    DEFAULT_COCKPIT_REST_PITCH,
+    DEFAULT_PHYSICAL_COCKPIT_POSITION,
     computeCockpitPose,
     dampCockpitPose,
     dampingAlpha,
@@ -9,6 +11,7 @@ import {
 
 const DRIVER_ANCHOR_PATTERN = /(driver.?camera|cockpit.?camera|camera.?anchor|driver.?view)/i
 const INTERIOR_PATTERN = /(interior|dashboard|dash|cockpit|steering|seat|windshield|windscreen|glass|door.?trim|pillar|mirror)/i
+const GLASS_PATTERN = /(windshield|windscreen|glass)/i
 const STEERING_WHEEL_PATTERN = /(steering.?wheel|steeringwheel|volant)/i
 const DRIVER_OCCLUDER_PATTERN = /(driver.*head|head.*driver|driver.*body)/i
 
@@ -41,8 +44,8 @@ export class CockpitView
         }
 
         this.anchor = {
-            source: 'fallback',
-            position: new THREE.Vector3(),
+            source: 'physics-fallback',
+            position: DEFAULT_PHYSICAL_COCKPIT_POSITION.clone(),
             quaternion: new THREE.Quaternion(),
             forwardCorrection: DEFAULT_COCKPIT_FORWARD_CORRECTION.clone(),
         }
@@ -59,9 +62,10 @@ export class CockpitView
 
         this.look = {
             yaw: 0,
-            pitch: 0,
+            pitch: DEFAULT_COCKPIT_REST_PITCH,
             targetYaw: 0,
-            targetPitch: 0,
+            targetPitch: DEFAULT_COCKPIT_REST_PITCH,
+            restPitch: DEFAULT_COCKPIT_REST_PITCH,
             interacting: false,
         }
 
@@ -184,6 +188,7 @@ export class CockpitView
             this.anchor.source = modelAnchor.name || 'model-anchor'
             this.anchor.position.copy(relativeTransform.position)
             this.anchor.quaternion.copy(relativeTransform.quaternion)
+            this.look.restPitch = 0
 
             const hasAuthoredRotation = this.anchor.quaternion.angleTo(IDENTITY_QUATERNION) > 0.001
             this.anchor.forwardCorrection.copy(
@@ -194,17 +199,11 @@ export class CockpitView
         }
         else
         {
-            const bounds = this.computeLocalBounds()
-            const size = bounds.getSize(new THREE.Vector3())
-
-            this.anchor.source = 'bounds-fallback'
-            this.anchor.position.set(
-                bounds.min.x + size.x * 0.56,
-                bounds.min.y + size.y * 0.72,
-                bounds.min.z + size.z * 0.32,
-            )
+            this.anchor.source = 'physics-fallback'
+            this.anchor.position.copy(DEFAULT_PHYSICAL_COCKPIT_POSITION)
             this.anchor.quaternion.identity()
             this.anchor.forwardCorrection.copy(DEFAULT_COCKPIT_FORWARD_CORRECTION)
+            this.look.restPitch = DEFAULT_COCKPIT_REST_PITCH
         }
 
         this.interiorNodes = []
@@ -227,19 +226,26 @@ export class CockpitView
                 this.steeringWheelBaseQuaternion = child.quaternion.clone()
             }
 
-            if(DRIVER_OCCLUDER_PATTERN.test(searchableName))
+            const shouldHideDriver = DRIVER_OCCLUDER_PATTERN.test(searchableName)
+            const shouldHideFallbackGlass = this.anchor.source === 'physics-fallback'
+                && GLASS_PATTERN.test(searchableName)
+
+            if(shouldHideDriver || shouldHideFallbackGlass)
                 this.hiddenNodes.push({ object: child, visible: child.visible })
         })
 
         this.ready = true
 
-        console.info('[CockpitView] ready', {
+        const readyDetails = {
             anchor: this.anchor.source,
             position: this.anchor.position.toArray(),
+            restPitchDegrees: THREE.MathUtils.radToDeg(this.look.restPitch),
             detectedInteriorNodes: cockpitConfig.interiorNodeNames.length,
             runtimeInteriorNodes: this.interiorNodes.length,
+            hiddenFallbackNodes: this.hiddenNodes.length,
             steeringWheel: this.steeringWheel?.name || null,
-        })
+        }
+        console.info('[CockpitView] ready', JSON.stringify(readyDetails))
 
         if(this.pendingActivation)
         {
@@ -287,35 +293,6 @@ export class CockpitView
         return { position, quaternion }
     }
 
-    computeLocalBounds()
-    {
-        const bounds = new THREE.Box3()
-        const childBounds = new THREE.Box3()
-        const relativeMatrix = new THREE.Matrix4()
-        const inverseRootMatrix = this.chassis.matrixWorld.clone().invert()
-
-        this.chassis.traverse((child) =>
-        {
-            if(!child.isMesh || !child.geometry)
-                return
-
-            if(!child.geometry.boundingBox)
-                child.geometry.computeBoundingBox()
-
-            if(!child.geometry.boundingBox)
-                return
-
-            relativeMatrix.multiplyMatrices(inverseRootMatrix, child.matrixWorld)
-            childBounds.copy(child.geometry.boundingBox).applyMatrix4(relativeMatrix)
-            bounds.union(childBounds)
-        })
-
-        if(bounds.isEmpty())
-            bounds.set(new THREE.Vector3(-2, -0.5, -1), new THREE.Vector3(2, 1.5, 1))
-
-        return bounds
-    }
-
     toggle()
     {
         if(!this.ready && !this.tryInitialize())
@@ -352,9 +329,9 @@ export class CockpitView
             dofStrength.value = 0
 
         this.look.yaw = 0
-        this.look.pitch = 0
+        this.look.pitch = this.look.restPitch
         this.look.targetYaw = 0
-        this.look.targetPitch = 0
+        this.look.targetPitch = this.look.restPitch
         this.pose.smoothedInitialized = false
         this.active = true
 
@@ -444,7 +421,11 @@ export class CockpitView
         {
             const returnAlpha = dampingAlpha(this.settings.returnSpeed, this.game.ticker.delta)
             this.look.targetYaw = THREE.MathUtils.lerp(this.look.targetYaw, 0, returnAlpha)
-            this.look.targetPitch = THREE.MathUtils.lerp(this.look.targetPitch, 0, returnAlpha)
+            this.look.targetPitch = THREE.MathUtils.lerp(
+                this.look.targetPitch,
+                this.look.restPitch,
+                returnAlpha,
+            )
         }
 
         if(this.pointer.id === null && !joystickActive)
