@@ -14,6 +14,7 @@ import {
     CHASE_VIEW_MODE,
     clampChaseDistance,
     computeChasePose,
+    createLookQuaternion,
     dampChasePose,
     returnOrbitToRest,
 } from '../sources/Game/Views/chasePose.js'
@@ -73,6 +74,17 @@ test('chase pose rotates behind the vehicle in world space', () =>
 
     vectorCloseTo(pose.position, new Vector3(10, 3.8, 27))
     vectorCloseTo(pose.target, new Vector3(10, 1.9, 17))
+})
+
+test('look quaternion points the camera negative Z axis at its target', () =>
+{
+    const position = new Vector3(-7, 2.8, 0)
+    const target = new Vector3(3, 0.9, 0)
+    const quaternion = createLookQuaternion(position, target)
+    const cameraForward = new Vector3(0, 0, -1).applyQuaternion(quaternion)
+    const expectedForward = target.clone().sub(position).normalize()
+
+    vectorCloseTo(cameraForward, expectedForward)
 })
 
 test('chase distance is clamped to configured limits', () =>
