@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
+      - '.npmrc'
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/prepare-su7-four-wheels.mjs'
