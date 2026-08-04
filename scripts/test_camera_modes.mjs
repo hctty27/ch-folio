@@ -167,17 +167,18 @@ test('chase camera constants match the external view contract', () =>
 
 test('runtime modules expose one camera toggle owner and explicit view lifecycles', async () =>
 {
-    const [controllerSource, chaseSource, cockpitSource, viewSource, indexSource] = await Promise.all([
+    const [controllerSource, chaseSource, cockpitSource, indexSource] = await Promise.all([
         readFile(new URL('../sources/Game/Views/CameraModeController.js', import.meta.url), 'utf8'),
         readFile(new URL('../sources/Game/Views/ChaseView.js', import.meta.url), 'utf8'),
         readFile(new URL('../sources/Game/Views/CockpitView.js', import.meta.url), 'utf8'),
-        readFile(new URL('../sources/Game/View.js', import.meta.url), 'utf8'),
         readFile(new URL('../sources/index.js', import.meta.url), 'utf8'),
     ])
 
     assert.match(controllerSource, /name:\s*['"]cameraToggle['"]/)
     assert.match(controllerSource, /Keyboard\.KeyC/)
     assert.match(controllerSource, /Gamepad\.r3/)
+    assert.match(controllerSource, /zoomToggle/)
+    assert.match(controllerSource, /key\s*!==\s*['"]Gamepad\.r3['"]/)
     assert.doesNotMatch(cockpitSource, /name:\s*['"]cameraToggle['"]/)
     assert.doesNotMatch(chaseSource, /name:\s*['"]cameraToggle['"]/)
 
@@ -187,9 +188,6 @@ test('runtime modules expose one camera toggle owner and explicit view lifecycle
         assert.match(cockpitSource, new RegExp(`\\n\\s*${method}\\(`))
     }
 
-    assert.match(viewSource, /static MODE_COCKPIT = 3/)
-    assert.match(viewSource, /static MODE_CHASE = 4/)
-    assert.doesNotMatch(viewSource, /zoomToggle[\s\S]*Gamepad\.r3/)
     assert.match(indexSource, /new ChaseView\(game\)/)
     assert.match(indexSource, /new CameraModeController\(game,\s*\{[\s\S]*chaseView,[\s\S]*cockpitView,[\s\S]*\}\)/)
 })
