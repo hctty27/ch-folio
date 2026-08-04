@@ -1,11 +1,12 @@
 import * as THREE from 'three/webgpu'
 import cockpitConfig from '../../data/cockpit.generated.json'
 import {
+    COCKPIT_CAMERA_SETTINGS,
+    COCKPIT_VIEW_MODE,
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
     DEFAULT_COCKPIT_REST_PITCH,
     DEFAULT_PHYSICAL_COCKPIT_POSITION,
     computeCockpitPose,
-    dampCockpitPose,
     dampingAlpha,
 } from './cockpitPose.js'
 
@@ -26,12 +27,10 @@ export class CockpitView
         this.active = false
         this.ready = false
         this.pendingActivation = false
+        this.inputConflictsResolved = false
 
         this.settings = {
-            fov: 62,
-            near: 0.03,
-            positionDamping: 20,
-            rotationDamping: 24,
+            ...COCKPIT_CAMERA_SETTINGS,
             lookDamping: 16,
             mouseSensitivity: 0.0022,
             gamepadYawSpeed: 1.8,
@@ -53,9 +52,6 @@ export class CockpitView
         this.pose = {
             targetPosition: new THREE.Vector3(),
             targetQuaternion: new THREE.Quaternion(),
-            smoothedPosition: new THREE.Vector3(),
-            smoothedQuaternion: new THREE.Quaternion(),
-            smoothedInitialized: false,
             headLookQuaternion: new THREE.Quaternion(),
             headLookEuler: new THREE.Euler(0, 0, 0, 'YXZ'),
         }
@@ -82,6 +78,7 @@ export class CockpitView
         this.savedCamera = null
         this.savedViewMode = null
         this.savedDofStrength = null
+        this.savedZoomBaseRatio = null
 
         this.onCameraToggle = (action) =>
         {
@@ -145,12 +142,12 @@ export class CockpitView
 
             this.look.targetYaw = THREE.MathUtils.clamp(
                 this.look.targetYaw - deltaX * this.settings.mouseSensitivity,
-                - this.settings.yawLimit,
+                -this.settings.yawLimit,
                 this.settings.yawLimit,
             )
             this.look.targetPitch = THREE.MathUtils.clamp(
                 this.look.targetPitch - deltaY * this.settings.mouseSensitivity,
-                - this.settings.pitchDownLimit,
+                -this.settings.pitchDownLimit,
                 this.settings.pitchUpLimit,
             )
         }
@@ -171,6 +168,30 @@ export class CockpitView
         window.addEventListener('pointercancel', this.onPointerUp)
     }
 
+    resolveInputConflicts()
+    {
+        if(this.inputConflictsResolved || !this.game.view)
+            return
+
+        this.game.view.constructor.MODE_COCKPIT = COCKPIT_VIEW_MODE
+
+        const zoomToggleAction = this.game.inputs.actions.get('zoomToggle')
+        if(zoomToggleAction)
+        {
+            zoomToggleAction.keys = zoomToggleAction.keys.filter((key) => key !== 'Gamepad.r3')
+            zoomToggleAction.activeKeys?.delete('Gamepad.r3')
+
+            if(zoomToggleAction.activeKeys?.size === 0)
+            {
+                zoomToggleAction.active = false
+                zoomToggleAction.value = 0
+                zoomToggleAction.trigger = null
+            }
+        }
+
+        this.inputConflictsResolved = true
+    }
+
     tryInitialize()
     {
         const chassis = this.game.world?.visualVehicle?.parts?.chassis
@@ -178,6 +199,7 @@ export class CockpitView
         if(!chassis || !this.game.physicalVehicle || !this.game.view)
             return false
 
+        this.resolveInputConflicts()
         this.chassis = chassis
         this.chassis.updateMatrixWorld(true)
 
@@ -207,6 +229,7 @@ export class CockpitView
         }
 
         this.interiorNodes = []
+        this.hiddenNodes = []
         this.chassis.traverse((child) =>
         {
             const materialNames = Array.isArray(child.material)
@@ -240,6 +263,8 @@ export class CockpitView
             anchor: this.anchor.source,
             position: this.anchor.position.toArray(),
             restPitchDegrees: THREE.MathUtils.radToDeg(this.look.restPitch),
+            viewMode: COCKPIT_VIEW_MODE,
+            camera: COCKPIT_CAMERA_SETTINGS,
             detectedInteriorNodes: cockpitConfig.interiorNodeNames.length,
             runtimeInteriorNodes: this.interiorNodes.length,
             hiddenFallbackNodes: this.hiddenNodes.length,
@@ -312,15 +337,23 @@ export class CockpitView
         if(this.active || !this.ready || this.game.view.cinematic?.active)
             return
 
-        const camera = this.game.view.camera
-        this.savedCamera = { fov: camera.fov, near: camera.near }
-        this.savedViewMode = this.game.view.mode
+        const view = this.game.view
+        const camera = view.camera
+        this.savedCamera = {
+            fov: camera.fov,
+            near: camera.near,
+            zoom: camera.zoom,
+        }
+        this.savedViewMode = view.mode
+        this.savedZoomBaseRatio = view.zoom?.baseRatio ?? null
 
-        if(this.game.view.setMode)
-            this.game.view.setMode(this.game.view.constructor.MODE_DEFAULT)
+        view.setMode?.(COCKPIT_VIEW_MODE)
+        if(view.zoom)
+            view.zoom.toggle = 0
 
         camera.fov = this.settings.fov
         camera.near = this.settings.near
+        camera.zoom = this.settings.zoom
         camera.updateProjectionMatrix()
 
         const dofStrength = this.game.rendering?.cheapDOFPass?.strength
@@ -332,14 +365,13 @@ export class CockpitView
         this.look.pitch = this.look.restPitch
         this.look.targetYaw = 0
         this.look.targetPitch = this.look.restPitch
-        this.pose.smoothedInitialized = false
         this.active = true
 
         for(const item of this.hiddenNodes)
             item.object.visible = false
 
         document.documentElement.classList.add('is-cockpit-view')
-        this.updatePose(true)
+        this.updatePose()
     }
 
     exit()
@@ -350,14 +382,23 @@ export class CockpitView
         this.active = false
         this.pointer.id = null
         this.look.interacting = false
-        this.pose.smoothedInitialized = false
 
-        const camera = this.game.view.camera
+        const view = this.game.view
+        const camera = view.camera
         if(this.savedCamera)
         {
             camera.fov = this.savedCamera.fov
             camera.near = this.savedCamera.near
+            camera.zoom = this.savedCamera.zoom
             camera.updateProjectionMatrix()
+        }
+
+        if(view.zoom && this.savedZoomBaseRatio !== null)
+        {
+            view.zoom.baseRatio = this.savedZoomBaseRatio
+            view.zoom.ratio = this.savedZoomBaseRatio
+            view.zoom.smoothedRatio = this.savedZoomBaseRatio
+            view.zoom.toggle = 0
         }
 
         for(const item of this.hiddenNodes)
@@ -367,8 +408,15 @@ export class CockpitView
         if(dofStrength && this.savedDofStrength !== null)
             dofStrength.value = this.savedDofStrength
 
-        if(this.savedViewMode !== null && this.game.view.setMode)
-            this.game.view.setMode(this.savedViewMode)
+        const restoreMode = this.savedViewMode ?? view.constructor.MODE_DEFAULT
+        view.setMode?.(restoreMode)
+
+        if(restoreMode === view.constructor.MODE_DEFAULT)
+        {
+            camera.position.copy(view.defaultCamera.position)
+            camera.quaternion.copy(view.defaultCamera.quaternion)
+            camera.updateMatrixWorld()
+        }
 
         document.documentElement.classList.remove('is-cockpit-view')
     }
@@ -391,7 +439,7 @@ export class CockpitView
 
         this.updateGamepadLook()
         this.updateLookReturn()
-        this.updatePose(false)
+        this.updatePose()
     }
 
     updateGamepadLook()
@@ -404,12 +452,12 @@ export class CockpitView
         this.look.interacting = true
         this.look.targetYaw = THREE.MathUtils.clamp(
             this.look.targetYaw - joystick.x * this.settings.gamepadYawSpeed * delta,
-            - this.settings.yawLimit,
+            -this.settings.yawLimit,
             this.settings.yawLimit,
         )
         this.look.targetPitch = THREE.MathUtils.clamp(
             this.look.targetPitch + joystick.y * this.settings.gamepadPitchSpeed * delta,
-            - this.settings.pitchDownLimit,
+            -this.settings.pitchDownLimit,
             this.settings.pitchUpLimit,
         )
     }
@@ -436,18 +484,16 @@ export class CockpitView
         this.look.pitch = THREE.MathUtils.lerp(this.look.pitch, this.look.targetPitch, lookAlpha)
     }
 
-    updatePose(immediate)
+    updatePose()
     {
         const physicalVehicle = this.game.physicalVehicle
-        const vehiclePosition = physicalVehicle.position
-        const vehicleQuaternion = physicalVehicle.quaternion
 
         this.pose.headLookEuler.set(this.look.pitch, this.look.yaw, 0, 'YXZ')
         this.pose.headLookQuaternion.setFromEuler(this.pose.headLookEuler)
 
         const targetPose = computeCockpitPose({
-            vehiclePosition,
-            vehicleQuaternion,
+            vehiclePosition: physicalVehicle.position,
+            vehicleQuaternion: physicalVehicle.quaternion,
             localPosition: this.anchor.position,
             anchorQuaternion: this.anchor.quaternion,
             forwardCorrection: this.anchor.forwardCorrection,
@@ -457,28 +503,21 @@ export class CockpitView
         this.pose.targetPosition.copy(targetPose.position)
         this.pose.targetQuaternion.copy(targetPose.quaternion)
 
-        if(immediate || !this.pose.smoothedInitialized)
+        const camera = this.game.view.camera
+        const projectionChanged = camera.fov !== this.settings.fov
+            || camera.near !== this.settings.near
+            || camera.zoom !== this.settings.zoom
+
+        if(projectionChanged)
         {
-            this.pose.smoothedPosition.copy(this.pose.targetPosition)
-            this.pose.smoothedQuaternion.copy(this.pose.targetQuaternion)
-            this.pose.smoothedInitialized = true
-        }
-        else
-        {
-            dampCockpitPose({
-                position: this.pose.smoothedPosition,
-                quaternion: this.pose.smoothedQuaternion,
-                targetPosition: this.pose.targetPosition,
-                targetQuaternion: this.pose.targetQuaternion,
-                positionDamping: this.settings.positionDamping,
-                rotationDamping: this.settings.rotationDamping,
-                delta: this.game.ticker.delta,
-            })
+            camera.fov = this.settings.fov
+            camera.near = this.settings.near
+            camera.zoom = this.settings.zoom
+            camera.updateProjectionMatrix()
         }
 
-        const camera = this.game.view.camera
-        camera.position.copy(this.pose.smoothedPosition)
-        camera.quaternion.copy(this.pose.smoothedQuaternion)
+        camera.position.copy(this.pose.targetPosition)
+        camera.quaternion.copy(this.pose.targetQuaternion)
         camera.updateMatrixWorld()
     }
 
@@ -490,7 +529,7 @@ export class CockpitView
         const steering = this.game.player?.steering || 0
         this.steeringWheelDeltaQuaternion.setFromAxisAngle(
             X_AXIS,
-            - steering * this.settings.steeringWheelAngle,
+            -steering * this.settings.steeringWheelAngle,
         )
         this.steeringWheel.quaternion
             .copy(this.steeringWheelBaseQuaternion)
