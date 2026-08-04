@@ -1,4 +1,4 @@
-import { Quaternion, Vector3 } from 'three'
+import { Matrix4, Quaternion, Vector3 } from 'three'
 
 import { dampingAlpha } from './cockpitPose.js'
 
@@ -120,15 +120,13 @@ export function createLookQuaternion(position, target)
         right.normalize()
 
     const up = new Vector3().crossVectors(right, forward).normalize()
-    const matrixElements = [
-        right.x, right.y, right.z, 0,
-        up.x, up.y, up.z, 0,
-        -forward.x, -forward.y, -forward.z, 0,
-        0, 0, 0, 1,
-    ]
+    const rotationMatrix = new Matrix4().makeBasis(
+        right,
+        up,
+        forward.clone().negate(),
+    )
 
-    const quaternion = new Quaternion()
-    quaternion.setFromRotationMatrix({ elements: matrixElements })
-
-    return quaternion.normalize()
+    return new Quaternion()
+        .setFromRotationMatrix(rotationMatrix)
+        .normalize()
 }
