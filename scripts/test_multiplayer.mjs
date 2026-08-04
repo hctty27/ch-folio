@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -158,4 +159,91 @@ test('snapshot quaternion interpolation uses the shortest path', () =>
 
     const sampled = buffer.sample(50)
     assert.deepEqual(sampled.q, [0, 0, 0, 1])
+})
+
+test('remote vehicle is render-only and animates SU7 wheel nodes', async () =>
+{
+    const source = await readFile(
+        new URL('../sources/Game/Multiplayer/RemoteVehicle.js', import.meta.url),
+        'utf8',
+    )
+
+    assert.match(source, /vehicleTemplate\.clone\(true\)/)
+    assert.match(source, /discoverSU7WheelNodes/)
+    assert.match(source, /SnapshotBuffer/)
+    assert.match(source, /removeFromParent\(\)/)
+    assert.doesNotMatch(source, /RAPIER|PhysicsVehicle|createRigidBody|createCollider/)
+})
+
+test('remote players owns creation, update and cleanup of remote vehicles', async () =>
+{
+    const source = await readFile(
+        new URL('../sources/Game/Multiplayer/RemotePlayers.js', import.meta.url),
+        'utf8',
+    )
+
+    assert.match(source, /new Map\(\)/)
+    assert.match(source, /new RemoteVehicle/)
+    assert.match(source, /upsert\(/)
+    assert.match(source, /remove\(/)
+    assert.match(source, /clear\(/)
+    assert.match(source, /update\(/)
+})
+
+test('server transport supports rooms, guarded reconnect and explicit shutdown', async () =>
+{
+    const source = await readFile(
+        new URL('../sources/Game/Server.js', import.meta.url),
+        'utf8',
+    )
+
+    assert.match(source, /start\(\{\s*room\s*=\s*['"]public['"]\s*\}\s*=\s*\{\}\)/)
+    assert.match(source, /searchParams\.set\(['"]room['"],\s*this\.room\)/)
+    assert.match(source, /this\.connecting/)
+    assert.match(source, /scheduleReconnect\(/)
+    assert.match(source, /Math\.min\(15000/)
+    assert.match(source, /\n\s*stop\(\)/)
+})
+
+test('multiplayer publishes at 12 Hz and clears remote players on disconnect', async () =>
+{
+    const source = await readFile(
+        new URL('../sources/Game/Multiplayer/Multiplayer.js', import.meta.url),
+        'utf8',
+    )
+
+    assert.match(source, /STATE_UPLOAD_HZ\s*=\s*12/)
+    assert.match(source, /new RemotePlayers\(game\)/)
+    assert.match(source, /createStateMessage\(/)
+    assert.match(source, /MESSAGE_TYPES\.WELCOME/)
+    assert.match(source, /MESSAGE_TYPES\.STATE/)
+    assert.match(source, /MESSAGE_TYPES\.LEFT/)
+    assert.match(source, /remotePlayers\.clear\(\)/)
+})
+
+test('multiplayer resolves the loaded local visual chassis as its clone template', async () =>
+{
+    const source = await readFile(
+        new URL('../sources/Game/Multiplayer/Multiplayer.js', import.meta.url),
+        'utf8',
+    )
+
+    assert.match(source, /resolveVehicleTemplate\(/)
+    assert.match(source, /world\?\.visualVehicle\?\.parts\?\.chassis/)
+    assert.match(source, /remoteVehicleTemplate/)
+})
+
+test('application bootstrap keeps multiplayer optional and exposes it for public debugging', async () =>
+{
+    const source = await readFile(
+        new URL('../sources/index.js', import.meta.url),
+        'utf8',
+    )
+
+    assert.match(source, /Multiplayer\.js/)
+    assert.match(source, /new Multiplayer\(game\)/)
+    assert.match(source, /VITE_MULTIPLAYER_ENABLED/)
+    assert.match(source, /VITE_SERVER_URL/)
+    assert.match(source, /multiplayer\.start\(\)/)
+    assert.match(source, /window\.multiplayer\s*=\s*multiplayer/)
 })
