@@ -39,7 +39,7 @@
     "howler": "^2.2.4",
     "msgpack-lite": "^0.1.26",
     "normalize-wheel": "^1.0.1",
-    "seedrandom": "^10.4.0",
+    "seedrandom": "^3.0.5",
     "sharp": "^0.34.5",
     "stats-gl": "^3.6.0",
     "stylus": "^0.64.0",
