@@ -43,7 +43,7 @@ test('camera modes cycle default, chase, cockpit, then default', () =>
     assert.equal(nextCameraMode('unknown'), CAMERA_MODES.DEFAULT)
 })
 
-test('default chase pose is behind and above a positive-X vehicle', () =>
+test('default chase pose uses the configured overlook pitch', () =>
 {
     const pose = computeChasePose({
         vehiclePosition: new Vector3(),
@@ -53,8 +53,15 @@ test('default chase pose is behind and above a positive-X vehicle', () =>
         lookAhead: CHASE_CAMERA_SETTINGS.lookAhead,
         targetHeight: CHASE_CAMERA_SETTINGS.targetHeight,
     })
+    const horizontalDistance = CHASE_CAMERA_SETTINGS.distance
+        * Math.cos(CHASE_CAMERA_SETTINGS.overlookPitch)
+    const verticalOrbit = CHASE_CAMERA_SETTINGS.distance
+        * Math.sin(CHASE_CAMERA_SETTINGS.overlookPitch)
 
-    vectorCloseTo(pose.position, new Vector3(-7, 3.4, 0))
+    vectorCloseTo(
+        pose.position,
+        new Vector3(-horizontalDistance, CHASE_CAMERA_SETTINGS.height + verticalOrbit, 0),
+    )
     vectorCloseTo(pose.target, new Vector3(3, 0.9, 0))
 })
 
@@ -72,8 +79,10 @@ test('chase pose rotates behind the vehicle in world space', () =>
         lookAhead: 3,
         targetHeight: 0.9,
     })
+    const horizontalDistance = 7 * Math.cos(CHASE_CAMERA_SETTINGS.overlookPitch)
+    const verticalOrbit = 7 * Math.sin(CHASE_CAMERA_SETTINGS.overlookPitch)
 
-    vectorCloseTo(pose.position, new Vector3(10, 3.8, 27))
+    vectorCloseTo(pose.position, new Vector3(10, 3.8 + verticalOrbit, 20 + horizontalDistance))
     vectorCloseTo(pose.target, new Vector3(10, 1.9, 17))
 })
 
@@ -156,7 +165,8 @@ test('chase camera constants match the external view contract', () =>
         distance: 7,
         minDistance: 4.5,
         maxDistance: 11,
-        height: 3.4,
+        height: 2.8,
+        overlookPitch: Math.PI / 18,
         lookAhead: 3,
         targetHeight: 0.9,
         positionDamping: 7,
