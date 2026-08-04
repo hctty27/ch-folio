@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu'
 import cockpitConfig from '../../data/cockpit.generated.json'
 import {
     COCKPIT_CAMERA_SETTINGS,
+    COCKPIT_GLASS_SETTINGS,
     COCKPIT_VIEW_MODE,
     DEFAULT_COCKPIT_FORWARD_CORRECTION,
     DEFAULT_COCKPIT_REST_PITCH,
@@ -72,6 +73,7 @@ export class CockpitView
         }
 
         this.hiddenNodes = []
+        this.glassMaterials = []
         this.steeringWheel = null
         this.steeringWheelBaseQuaternion = null
         this.steeringWheelDeltaQuaternion = new THREE.Quaternion()
@@ -230,15 +232,38 @@ export class CockpitView
 
         this.interiorNodes = []
         this.hiddenNodes = []
+        this.glassMaterials = []
+        const seenGlassMaterials = new Set()
+
         this.chassis.traverse((child) =>
         {
-            const materialNames = Array.isArray(child.material)
-                ? child.material.map((material) => material?.name || '').join(' ')
-                : child.material?.name || ''
+            const materials = Array.isArray(child.material)
+                ? child.material.filter(Boolean)
+                : child.material
+                    ? [ child.material ]
+                    : []
+            const materialNames = materials.map((material) => material.name || '').join(' ')
             const searchableName = `${child.name || ''} ${materialNames}`
 
             if(INTERIOR_PATTERN.test(searchableName))
                 this.interiorNodes.push(child)
+
+            if(GLASS_PATTERN.test(searchableName))
+            {
+                for(const material of materials)
+                {
+                    if(seenGlassMaterials.has(material))
+                        continue
+
+                    seenGlassMaterials.add(material)
+                    this.glassMaterials.push({
+                        material,
+                        side: material.side,
+                        depthWrite: material.depthWrite,
+                        forceSinglePass: material.forceSinglePass,
+                    })
+                }
+            }
 
             if(
                 !this.steeringWheel
@@ -249,11 +274,7 @@ export class CockpitView
                 this.steeringWheelBaseQuaternion = child.quaternion.clone()
             }
 
-            const shouldHideDriver = DRIVER_OCCLUDER_PATTERN.test(searchableName)
-            const shouldHideFallbackGlass = this.anchor.source === 'physics-fallback'
-                && GLASS_PATTERN.test(searchableName)
-
-            if(shouldHideDriver || shouldHideFallbackGlass)
+            if(DRIVER_OCCLUDER_PATTERN.test(searchableName))
                 this.hiddenNodes.push({ object: child, visible: child.visible })
         })
 
@@ -267,6 +288,7 @@ export class CockpitView
             camera: COCKPIT_CAMERA_SETTINGS,
             detectedInteriorNodes: cockpitConfig.interiorNodeNames.length,
             runtimeInteriorNodes: this.interiorNodes.length,
+            glassMaterialCount: this.glassMaterials.length,
             hiddenFallbackNodes: this.hiddenNodes.length,
             steeringWheel: this.steeringWheel?.name || null,
         }
@@ -316,6 +338,30 @@ export class CockpitView
         relativeMatrix.decompose(position, quaternion, scale)
 
         return { position, quaternion }
+    }
+
+    applyCockpitGlass()
+    {
+        for(const item of this.glassMaterials)
+        {
+            const material = item.material
+            if(COCKPIT_GLASS_SETTINGS.doubleSided)
+                material.side = THREE.DoubleSide
+            material.depthWrite = COCKPIT_GLASS_SETTINGS.depthWrite
+            material.forceSinglePass = COCKPIT_GLASS_SETTINGS.forceSinglePass
+            material.needsUpdate = true
+        }
+    }
+
+    restoreCockpitGlass()
+    {
+        for(const item of this.glassMaterials)
+        {
+            item.material.side = item.side
+            item.material.depthWrite = item.depthWrite
+            item.material.forceSinglePass = item.forceSinglePass
+            item.material.needsUpdate = true
+        }
     }
 
     toggle()
@@ -369,6 +415,7 @@ export class CockpitView
 
         for(const item of this.hiddenNodes)
             item.object.visible = false
+        this.applyCockpitGlass()
 
         document.documentElement.classList.add('is-cockpit-view')
         this.updatePose()
@@ -401,6 +448,7 @@ export class CockpitView
             view.zoom.toggle = 0
         }
 
+        this.restoreCockpitGlass()
         for(const item of this.hiddenNodes)
             item.object.visible = item.visible
 
