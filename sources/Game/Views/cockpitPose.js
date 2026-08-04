@@ -36,3 +36,25 @@ export function computeCockpitPose({
 
     return { position, quaternion }
 }
+
+export function dampCockpitPose({
+    position,
+    quaternion,
+    targetPosition,
+    targetQuaternion,
+    positionDamping,
+    rotationDamping,
+    delta,
+})
+{
+    position.lerp(
+        targetPosition,
+        dampingAlpha(positionDamping, delta),
+    )
+    quaternion.slerp(
+        targetQuaternion,
+        dampingAlpha(rotationDamping, delta),
+    ).normalize()
+
+    return { position, quaternion }
+}
