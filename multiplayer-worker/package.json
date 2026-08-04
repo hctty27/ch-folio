@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
     "types": "wrangler types",
     "check": "npm run types && tsc --noEmit"
   },
