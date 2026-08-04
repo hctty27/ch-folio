@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import { Quaternion, Vector3 } from 'three'
 
+import { CameraModeController } from '../sources/Game/Views/CameraModeController.js'
 import {
     CAMERA_MODES,
     CAMERA_MODE_ORDER,
@@ -163,6 +164,51 @@ test('chase camera constants match the external view contract', () =>
         lookDamping: 12,
         returnSpeed: 2.5,
     })
+})
+
+test('controller resolves R3 after the view registers zoomToggle asynchronously', () =>
+{
+    const actions = new Map()
+    const game = {
+        inputs: {
+            actions,
+            addActions(addedActions)
+            {
+                for(const action of addedActions)
+                    actions.set(action.name, { ...action })
+            },
+            events: { on() {} },
+        },
+        ticker: { events: { on() {} } },
+        view: null,
+    }
+    const inactiveView = {
+        enter: () => true,
+        exit: () => false,
+    }
+
+    const controller = new CameraModeController(game, {
+        chaseView: inactiveView,
+        cockpitView: inactiveView,
+    })
+
+    const zoomToggle = {
+        keys: [ 'Gamepad.r3' ],
+        activeKeys: new Set([ 'Gamepad.r3' ]),
+        active: true,
+        value: 1,
+        trigger: 'start',
+    }
+    actions.set('zoomToggle', zoomToggle)
+    game.view = { cinematic: { active: false } }
+
+    controller.update()
+
+    assert.deepEqual(zoomToggle.keys, [])
+    assert.equal(zoomToggle.activeKeys.size, 0)
+    assert.equal(zoomToggle.active, false)
+    assert.equal(zoomToggle.value, 0)
+    assert.equal(zoomToggle.trigger, null)
 })
 
 test('runtime modules expose one camera toggle owner and explicit view lifecycles', async () =>
