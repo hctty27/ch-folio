@@ -4,6 +4,7 @@ import { Game } from './Game/Game.js'
 import { CameraModeController } from './Game/Views/CameraModeController.js'
 import { ChaseView } from './Game/Views/ChaseView.js'
 import { CockpitView } from './Game/Views/CockpitView.js'
+import { installCameraToggleControlHelp } from './Game/Views/cameraControlsHelp.js'
 import { SU7FourWheelController } from './Game/World/SU7FourWheelController.js'
 import consoleLog from './data/consoleLog.js'
 
@@ -11,6 +12,8 @@ if(import.meta.env.VITE_LOG)
     console.log(
         ...consoleLog
     )
+
+installCameraToggleControlHelp()
 
 const game = new Game()
 const cockpitView = new CockpitView(game)
