@@ -27,7 +27,7 @@
 - `scripts/test_multiplayer.mjs`
 - `package.json`
 
-**Status:** Implemented.
+**Status:** Implemented and verified.
 
 - Compact protocol constants and flags.
 - Finite-number and quaternion validation.
@@ -43,7 +43,7 @@
 - `sources/Game/Multiplayer/RemoteVehicle.js`
 - `sources/Game/Multiplayer/RemotePlayers.js`
 
-**Status:** Implemented.
+**Status:** Implemented and verified.
 
 - Clone the loaded local visual chassis once `VisualVehicle` is ready.
 - Discover SU7 wheel nodes through the existing helper.
@@ -59,7 +59,7 @@
 - `sources/Game/Multiplayer/Multiplayer.js`
 - `sources/index.js`
 
-**Status:** Implemented.
+**Status:** Implemented and verified.
 
 - Room query parameter support.
 - Concurrent-connect guard.
@@ -78,12 +78,13 @@
 
 - `multiplayer-worker/package.json`
 - `multiplayer-worker/tsconfig.json`
+- `multiplayer-worker/vitest.config.ts`
 - `multiplayer-worker/wrangler.jsonc`
 - `multiplayer-worker/src/protocol.ts`
 - `multiplayer-worker/src/index.ts`
 - `multiplayer-worker/test/protocol.test.ts`
 
-**Status:** Implemented; full dependency-backed verification is delegated to repository CI.
+**Status:** Implemented and verified.
 
 - `GET /health` endpoint.
 - `/ws?room=<name>` WebSocket route.
@@ -94,6 +95,7 @@
 - Initial room snapshot reconstructed from active socket attachments.
 - Server timestamps, finite-number validation, quaternion normalization, sequence ordering, message-size limit and per-socket rate limiting.
 - SQLite-backed Durable Object declared with Wrangler `exports`.
+- Isolated Vitest configuration so Worker tests do not inherit the frontend Vite root.
 
 ## Task 5: Deployment and CI
 
@@ -105,7 +107,7 @@
 - `.github/workflows/verify.yml`
 - `.gitignore`
 
-**Status:** Implemented.
+**Status:** Implemented and verified.
 
 - Worker install, test, type-check, local development and deployment commands.
 - Frontend environment configuration.
@@ -115,7 +117,7 @@
 
 ## Verification record
 
-### Executed locally
+### Local focused verification
 
 ```bash
 node --test scripts/test_multiplayer.mjs
@@ -133,9 +135,9 @@ node --check sources/index.js
 
 Result: all syntax checks exited successfully.
 
-### Pending external environment
+### GitHub Actions full verification
 
-The current execution environment cannot download the repository or install Wrangler dependencies. The draft pull request therefore requests these checks from GitHub Actions:
+Verify workflow run `#139` completed successfully with:
 
 ```bash
 npm test
@@ -144,9 +146,18 @@ npm test --prefix multiplayer-worker
 npm run check --prefix multiplayer-worker
 ```
 
+Results:
+
+- 49 JavaScript tests passed.
+- 4 Python SU7 conversion tests passed.
+- Vite production build completed successfully.
+- 5 Worker protocol tests passed.
+- Wrangler generated binding types successfully.
+- TypeScript `tsc --noEmit` completed successfully.
+
 ## Publication
 
 - Branch: `feat/multiplayer-mvp`
 - Draft pull request: `#6`
 - Base branch: `main`
-- Do not merge until the full CI commands above are confirmed or run manually in a dependency-complete checkout.
+- The branch is verified but intentionally remains unmerged and undeployed until explicitly approved.
