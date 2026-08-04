@@ -1,4 +1,4 @@
-commit=2498571a07ca48a2dfb04aeac28cdf163bdd2e50
+commit=49dbd32249504e4e8b36fb25075c5cb339fea1d4
 node=v22.23.1
 python=Python 3.12.13
 
@@ -10,11 +10,11 @@ Collecting Pillow<13,>=10 (from -r scripts/requirements-su7.txt (line 2))
 Collecting trimesh==4.11.1 (from -r scripts/requirements-su7.txt (line 3))
   Downloading trimesh-4.11.1-py3-none-any.whl.metadata (13 kB)
 Downloading trimesh-4.11.1-py3-none-any.whl (740 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 740.4/740.4 kB 20.9 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 740.4/740.4 kB 80.9 MB/s  0:00:00
 Downloading numpy-2.5.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 175.4 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 283.5 MB/s  0:00:00
 Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 359.0 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 336.6 MB/s  0:00:00
 Installing collected packages: Pillow, numpy, trimesh
 
 Successfully installed Pillow-12.3.0 numpy-2.5.1 trimesh-4.11.1
@@ -24,12 +24,23 @@ Successfully installed Pillow-12.3.0 numpy-2.5.1 trimesh-4.11.1
 exit=0
 
 ### npm clean-install --progress=false
-npm error code ETARGET
-npm error notarget No matching version found for seedrandom@^10.4.0.
-npm error notarget In most cases you or one of your dependencies are requesting
-npm error notarget a package version that doesn't exist.
-npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_25_05_105Z-debug-0.log
-exit=1
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+
+added 409 packages, and audited 410 packages in 8s
+
+109 packages are looking for funding
+  run `npm fund` for details
+
+24 vulnerabilities (6 low, 5 moderate, 12 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+exit=0
 
 ### npm test
 
@@ -41,140 +52,299 @@ exit=1
 > node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs
 
 TAP version 13
-# node:internal/modules/package_json_reader:314
-#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
-#         ^
-# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'three' imported from /home/runner/work/ch-folio/ch-folio/scripts/test_cockpit_pose.mjs
-#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:314:9)
-#     at packageResolve (node:internal/modules/esm/resolve:768:81)
-#     at moduleResolve (node:internal/modules/esm/resolve:855:18)
-#     at defaultResolve (node:internal/modules/esm/resolve:985:11)
-#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
-#     at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
-#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
-#     at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
-#   code: 'ERR_MODULE_NOT_FOUND'
-# }
-# Node.js v22.23.1
-# Subtest: scripts/test_cockpit_pose.mjs
-not ok 1 - scripts/test_cockpit_pose.mjs
+# Subtest: computeCockpitPose keeps the local position when the vehicle has no transform
+ok 1 - computeCockpitPose keeps the local position when the vehicle has no transform
   ---
-  duration_ms: 104.518353
+  duration_ms: 1.261555
   type: 'test'
-  location: '/home/runner/work/ch-folio/ch-folio/scripts/test_cockpit_pose.mjs:1:1'
-  failureType: 'testCodeFailure'
-  exitCode: 1
-  signal: ~
-  error: 'test failed'
-  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: computeCockpitPose rotates the driver offset into vehicle world space
+ok 2 - computeCockpitPose rotates the driver offset into vehicle world space
+  ---
+  duration_ms: 0.257961
+  type: 'test'
+  ...
+# Subtest: rigid cockpit pose follows vehicle translation exactly
+ok 3 - rigid cockpit pose follows vehicle translation exactly
+  ---
+  duration_ms: 0.282798
+  type: 'test'
+  ...
+# Subtest: cockpit uses an isolated view mode and a fixed balanced projection
+ok 4 - cockpit uses an isolated view mode and a fixed balanced projection
+  ---
+  duration_ms: 0.71822
+  type: 'test'
+  ...
+# Subtest: default correction points a Three.js camera toward the vehicle positive X axis
+ok 5 - default correction points a Three.js camera toward the vehicle positive X axis
+  ---
+  duration_ms: 0.261648
+  type: 'test'
+  ...
+# Subtest: physical fallback moves forward while retaining centered eye height
+ok 6 - physical fallback moves forward while retaining centered eye height
+  ---
+  duration_ms: 0.156892
+  type: 'test'
+  ...
+# Subtest: fallback rest pitch looks forward and slightly toward the road
+ok 7 - fallback rest pitch looks forward and slightly toward the road
+  ---
+  duration_ms: 0.3537
+  type: 'test'
+  ...
+# Subtest: computeCockpitPose does not mutate vehicle or head quaternions
+ok 8 - computeCockpitPose does not mutate vehicle or head quaternions
+  ---
+  duration_ms: 0.244316
+  type: 'test'
+  ...
+# Subtest: dampingAlpha is frame-rate independent and bounded
+ok 9 - dampingAlpha is frame-rate independent and bounded
+  ---
+  duration_ms: 0.384017
+  type: 'test'
+  ...
+# Subtest: dampCockpitPose keeps independent smoothing state between frames
+ok 10 - dampCockpitPose keeps independent smoothing state between frames
+  ---
+  duration_ms: 0.651897
+  type: 'test'
   ...
 # Subtest: materializeVehicle joins ordered chunks and writes both GLB targets
-ok 2 - materializeVehicle joins ordered chunks and writes both GLB targets
+ok 11 - materializeVehicle joins ordered chunks and writes both GLB targets
   ---
-  duration_ms: 8.828249
+  duration_ms: 16.275655
   type: 'test'
   ...
 # Subtest: materializeVehicle rejects an incomplete chunk sequence before decompression
-ok 3 - materializeVehicle rejects an incomplete chunk sequence before decompression
+ok 12 - materializeVehicle rejects an incomplete chunk sequence before decompression
   ---
-  duration_ms: 1.626801
+  duration_ms: 4.173391
   type: 'test'
   ...
 # [SU7FourWheelController] using four independent SU7 wheel nodes
 # [SU7FourWheelController] using four independent SU7 wheel nodes
 # [SU7FourWheelController] using four independent SU7 wheel nodes
 # Subtest: hides legacy clones and drives four SU7 wheel roots
-ok 4 - hides legacy clones and drives four SU7 wheel roots
+ok 13 - hides legacy clones and drives four SU7 wheel roots
   ---
-  duration_ms: 2.295906
+  duration_ms: 4.905267
   type: 'test'
   ...
 # Subtest: uses the same roll direction for all normalized wheel pivots
-ok 5 - uses the same roll direction for all normalized wheel pivots
+ok 14 - uses the same roll direction for all normalized wheel pivots
   ---
-  duration_ms: 1.126853
+  duration_ms: 1.215379
   type: 'test'
   ...
 # Subtest: only front wheels receive steering rotation
-ok 6 - only front wheels receive steering rotation
+ok 15 - only front wheels receive steering rotation
   ---
-  duration_ms: 0.445655
+  duration_ms: 0.638322
   type: 'test'
   ...
 # Subtest: creates four independent wheel roots in physical wheel order
-ok 7 - creates four independent wheel roots in physical wheel order
+ok 16 - creates four independent wheel roots in physical wheel order
   ---
-  duration_ms: 3.487475
+  duration_ms: 4.119401
   type: 'test'
   ...
 # Subtest: keeps rolling meshes below roll pivot and brake meshes outside it
-ok 8 - keeps rolling meshes below roll pivot and brake meshes outside it
+ok 17 - keeps rolling meshes below roll pivot and brake meshes outside it
   ---
-  duration_ms: 0.733332
+  duration_ms: 0.832765
   type: 'test'
   ...
 # Subtest: corrects non-uniform rolling-plane scale before wheel rotation
-ok 9 - corrects non-uniform rolling-plane scale before wheel rotation
+ok 18 - corrects non-uniform rolling-plane scale before wheel rotation
   ---
-  duration_ms: 0.621902
+  duration_ms: 0.72873
   type: 'test'
   ...
 # Subtest: bakes non-Z source axle into a dedicated correction node
-ok 10 - bakes non-Z source axle into a dedicated correction node
+ok 19 - bakes non-Z source axle into a dedicated correction node
   ---
-  duration_ms: 0.489114
+  duration_ms: 0.577468
   type: 'test'
   ...
 # Subtest: is idempotent and preserves the legacy template for fallback
-ok 11 - is idempotent and preserves the legacy template for fallback
+ok 20 - is idempotent and preserves the legacy template for fallback
   ---
-  duration_ms: 1.086158
+  duration_ms: 1.143555
   type: 'test'
   ...
 # Subtest: rewrites only the JSON chunk and preserves binary bytes
-ok 12 - rewrites only the JSON chunk and preserves binary bytes
+ok 21 - rewrites only the JSON chunk and preserves binary bytes
   ---
-  duration_ms: 1.207718
+  duration_ms: 1.106005
   type: 'test'
   ...
 # Subtest: discovers SU7 wheel nodes in physical wheel index order
-ok 13 - discovers SU7 wheel nodes in physical wheel index order
+ok 22 - discovers SU7 wheel nodes in physical wheel index order
   ---
-  duration_ms: 1.423499
+  duration_ms: 1.559541
   type: 'test'
   ...
 # Subtest: falls back atomically when any required SU7 wheel node is missing
-ok 14 - falls back atomically when any required SU7 wheel node is missing
+ok 23 - falls back atomically when any required SU7 wheel node is missing
   ---
-  duration_ms: 0.329484
+  duration_ms: 0.377095
   type: 'test'
   ...
-1..14
-# tests 14
+1..23
+# tests 23
 # suites 0
-# pass 13
-# fail 1
+# pass 23
+# fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 301.463352
-exit=1
+# duration_ms 167.996543
+
+> bruno-simon-folio-2025@0.0.0 test:su7-convert
+> PYTHONPATH=scripts python3 -m unittest scripts/test_convert_su7.py -v
+
+test_exported_scene_contains_nodes_required_by_visual_vehicle (scripts.test_convert_su7.ConvertSu7Test.test_exported_scene_contains_nodes_required_by_visual_vehicle) ... ok
+test_vehicle_transform_maps_axles_and_wheel_center_to_game_coordinates (scripts.test_convert_su7.ConvertSu7Test.test_vehicle_transform_maps_axles_and_wheel_center_to_game_coordinates) ... ok
+test_vertex_clustering_reduces_faces_without_degenerate_triangles (scripts.test_convert_su7.ConvertSu7Test.test_vertex_clustering_reduces_faces_without_degenerate_triangles) ... ok
+test_wheel_template_is_parked_outside_the_playable_scene (scripts.test_convert_su7.ConvertSu7Test.test_wheel_template_is_parked_outside_the_playable_scene) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.067s
+
+OK
+exit=0
 
 ### npm run build
 
 > bruno-simon-folio-2025@0.0.0 prebuild
 > npm install --no-save --package-lock=true --ignore-scripts --prefer-offline --audit=false --fund=false stylus@0.64.0
 
-npm error code ETARGET
-npm error notarget No matching version found for seedrandom@^10.4.0.
-npm error notarget In most cases you or one of your dependencies are requesting
-npm error notarget a package version that doesn't exist.
-npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-08-04T09_25_06_708Z-debug-0.log
-exit=1
+
+up to date in 549ms
+
+> bruno-simon-folio-2025@0.0.0 build
+> npm run prepare:wheels && npm run prepare:cockpit && vite build --mode production
+
+
+> bruno-simon-folio-2025@0.0.0 prepare:wheels
+> node scripts/prepare-su7-four-wheels.mjs
+
+[su7-four-wheels] {
+  input: 'static/vehicle/default.glb',
+  changed: true,
+  axleAxis: 'z',
+  center: [
+    -0.0000045299530029296875,
+    0.000023230910301208496,
+    -0.002714138478040695
+  ],
+  extents: [ 0.4298235774040222, 0.8000335395336151, 0.2194046452641487 ]
+}
+[su7-four-wheels] {
+  input: 'static/vehicle/default-compressed.glb',
+  changed: true,
+  axleAxis: 'z',
+  center: [
+    -0.0000045299530029296875,
+    0.000023230910301208496,
+    -0.002714138478040695
+  ],
+  extents: [ 0.4298235774040222, 0.8000335395336151, 0.2194046452641487 ]
+}
+
+> bruno-simon-folio-2025@0.0.0 prepare:cockpit
+> node scripts/generate-cockpit-config.mjs
+
+[cockpit-config] {
+  generatedAt: '2026-08-04T09:26:59.074Z',
+  nodeCount: 88,
+  meshCount: 14,
+  materialCount: 11,
+  anchorNodeNames: [],
+  interiorNodeNames: [
+    'common_glass',
+    'wheelFrontRightRollMirror',
+    'wheelFrontRightBrakeMirror',
+    'wheelFrontLeftRollMirror',
+    'wheelFrontLeftBrakeMirror',
+    'wheelRearRightRollMirror',
+    'wheelRearRightBrakeMirror',
+    'wheelRearLeftRollMirror',
+    'wheelRearLeftBrakeMirror',
+    'su7_glass'
+  ],
+  steeringWheelNodeNames: []
+}
+[36mvite v7.2.4 [32mbuilding client environment for production...[36m[39m
+[33m[1m(!) %VITE_ANALYTICS_TAG% is not defined in env variables found in /index.html. Is the variable mistyped?[22m[39m
+transforming...
+
+../fonts/Pally-Regular.woff2 referenced in ../fonts/Pally-Regular.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Medium.woff2 referenced in ../fonts/Pally-Medium.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Bold.woff2 referenced in ../fonts/Pally-Bold.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/mouse-keyboard.svg referenced in ../ui/controls/mouse-keyboard.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/touch.svg referenced in ../ui/controls/touch.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad.svg referenced in ../ui/controls/gamepad.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/achievements/check.svg referenced in ../ui/achievements/check.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-circle.webp referenced in ../ui/controls/gamepad-circle.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-triangle.webp referenced in ../ui/controls/gamepad-triangle.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-square.webp referenced in ../ui/controls/gamepad-square.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-cross.webp referenced in ../ui/controls/gamepad-cross.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/actions/actions-icon-arrow.webp referenced in ../ui/actions/actions-icon-arrow.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/actions/actions-icon-close.webp referenced in ../ui/actions/actions-icon-close.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/actions/actions-icon-open.webp referenced in ../ui/actions/actions-icon-open.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/music-note.svg referenced in ../ui/music-note.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/map/player.webp referenced in ../ui/map/player.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Regular.woff referenced in ../fonts/Pally-Regular.woff didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Medium.woff referenced in ../fonts/Pally-Medium.woff didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Bold.woff referenced in ../fonts/Pally-Bold.woff didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Regular.ttf referenced in ../fonts/Pally-Regular.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Medium.ttf referenced in ../fonts/Pally-Medium.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Bold.ttf referenced in ../fonts/Pally-Bold.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+[32m✓[39m 784 modules transformed.
+[33mnode_modules/vm-browserify/index.js (110:11): Use of eval in "node_modules/vm-browserify/index.js" is strongly discouraged as it poses security risks and may cause issues with minification.[39m
+rendering chunks...
+computing gzip size...
+[2m../dist/[22m[32mindex.html                             [39m[1m[2m   58.82 kB[22m[1m[22m[2m │ gzip:     8.41 kB[22m
+[2m../dist/[22m[2massets/[22m[32mrapier_wasm3d_bg-0Vyjx73g.wasm  [39m[1m[2m1,698.49 kB[22m[1m[22m[2m │ gzip:   627.43 kB[22m
+[2m../dist/[22m[2massets/[22m[35mindex-Di03QkGT.css              [39m[1m[2m   40.26 kB[22m[1m[22m[2m │ gzip:     6.52 kB[22m
+[2m../dist/[22m[2massets/[22m[36mrapier-Di5Z451G.js              [39m[1m[2m  229.92 kB[22m[1m[22m[2m │ gzip:    34.80 kB[22m
+[2m../dist/[22m[2massets/[22m[36mindex-DvtTSTI3.js               [39m[1m[33m4,901.39 kB[39m[22m[2m │ gzip: 1,041.17 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 17.65s[39m
+exit=0
 
 ### node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
-{"input":"/home/runner/work/ch-folio/ch-folio/static/vehicle/default.glb","nodes":18,"meshes":14,"materials":11}
-{"depth":1,"index":1,"name":"chassis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[2,3,4,5,6,7,8,9,10,11,12],"primitives":null}
+{"input":"/home/runner/work/ch-folio/ch-folio/static/vehicle/default.glb","nodes":88,"meshes":14,"materials":11}
+{"depth":1,"index":1,"name":"chassis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[2,3,4,5,6,7,8,9,10,11,12,18,36,54,71],"primitives":null}
 {"depth":2,"index":2,"name":"bodyPainted","mesh":0,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_paint","positionAccessor":1,"min":[-1.4906692504882812,-0.6610304713249207,-0.97850501537323],"max":[1.4836684465408325,0.6517991423606873,0.9785072207450867],"extents":[2.9743376970291138,1.312829613685608,1.9570122361183167]}]}
 {"depth":2,"index":12,"name":"wheelContainer","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[13],"primitives":null}
 {"depth":3,"index":13,"name":"wheelCylinder","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[14,15,16,17],"primitives":null}
@@ -182,5 +352,75 @@ exit=1
 {"depth":4,"index":15,"name":"wheelPart_Mesh75","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_brake","positionAccessor":35,"min":[-0.10242651402950287,-0.19067169725894928,-0.017711909487843513],"max":[0.1024310514330864,0.1906333565711975,0.03242853283882141],"extents":[0.20485756546258926,0.3813050538301468,0.050140442326664925]}]}
 {"depth":4,"index":16,"name":"wheelPart_Mesh76","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_wheel","positionAccessor":38,"min":[-0.16718348860740662,-0.31120848655700684,-0.10817764699459076],"max":[0.16718801856040955,0.3111605942249298,0.10426434129476547],"extents":[0.33437150716781616,0.6223690807819366,0.21244198828935623]}]}
 {"depth":4,"index":17,"name":"wheelPart_Mesh77","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":41,"min":[-0.20370586216449738,-0.3791452944278717,-0.11241646111011505],"max":[0.20370586216449738,0.3791850805282593,0.10698818415403366],"extents":[0.40741172432899475,0.758330374956131,0.2194046452641487]}]}
+{"depth":2,"index":18,"name":"wheelFrontRight","mesh":null,"translation":[0.9,-0.5,0.75],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[19],"primitives":null}
+{"depth":3,"index":19,"name":"wheelFrontRightSteer","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[20,21],"primitives":null}
+{"depth":4,"index":20,"name":"wheelFrontRightRoll","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[25],"primitives":null}
+{"depth":5,"index":25,"name":"wheelFrontRightRollMirror","mesh":null,"translation":[0,0,0],"rotation":[0,1,0,0],"scale":[1,1,1],"children":[26],"primitives":null}
+{"depth":6,"index":26,"name":"wheelFrontRightRollAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[27],"primitives":null}
+{"depth":7,"index":27,"name":"wheelFrontRightRollAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[28],"primitives":null}
+{"depth":8,"index":28,"name":"wheelFrontRightRollOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[29],"primitives":null}
+{"depth":9,"index":29,"name":"wheelFrontRightRollSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[22,23,24],"primitives":null}
+{"depth":10,"index":22,"name":"wheelFrontRightRollPart0","mesh":10,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":32,"min":[-0.21491631865501404,-0.39999353885650635,-0.10953069478273392],"max":[0.21490725874900818,0.40004000067710876,0.10415565222501755],"extents":[0.4298235774040222,0.8000335395336151,0.21368634700775146]}]}
+{"depth":10,"index":23,"name":"wheelPainted_frontRight","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_wheel","positionAccessor":38,"min":[-0.16718348860740662,-0.31120848655700684,-0.10817764699459076],"max":[0.16718801856040955,0.3111605942249298,0.10426434129476547],"extents":[0.33437150716781616,0.6223690807819366,0.21244198828935623]}]}
+{"depth":10,"index":24,"name":"wheelFrontRightRollPart2","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":41,"min":[-0.20370586216449738,-0.3791452944278717,-0.11241646111011505],"max":[0.20370586216449738,0.3791850805282593,0.10698818415403366],"extents":[0.40741172432899475,0.758330374956131,0.2194046452641487]}]}
+{"depth":4,"index":21,"name":"wheelFrontRightBrake","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[31],"primitives":null}
+{"depth":5,"index":31,"name":"wheelFrontRightBrakeMirror","mesh":null,"translation":[0,0,0],"rotation":[0,1,0,0],"scale":[1,1,1],"children":[32],"primitives":null}
+{"depth":6,"index":32,"name":"wheelFrontRightBrakeAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[33],"primitives":null}
+{"depth":7,"index":33,"name":"wheelFrontRightBrakeAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[34],"primitives":null}
+{"depth":8,"index":34,"name":"wheelFrontRightBrakeOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[35],"primitives":null}
+{"depth":9,"index":35,"name":"wheelFrontRightBrakeSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[30],"primitives":null}
+{"depth":10,"index":30,"name":"wheelFrontRightBrakePart0","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_brake","positionAccessor":35,"min":[-0.10242651402950287,-0.19067169725894928,-0.017711909487843513],"max":[0.1024310514330864,0.1906333565711975,0.03242853283882141],"extents":[0.20485756546258926,0.3813050538301468,0.050140442326664925]}]}
+{"depth":2,"index":36,"name":"wheelFrontLeft","mesh":null,"translation":[0.9,-0.5,-0.75],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[37],"primitives":null}
+{"depth":3,"index":37,"name":"wheelFrontLeftSteer","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[38,39],"primitives":null}
+{"depth":4,"index":38,"name":"wheelFrontLeftRoll","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[43],"primitives":null}
+{"depth":5,"index":43,"name":"wheelFrontLeftRollMirror","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[44],"primitives":null}
+{"depth":6,"index":44,"name":"wheelFrontLeftRollAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[45],"primitives":null}
+{"depth":7,"index":45,"name":"wheelFrontLeftRollAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[46],"primitives":null}
+{"depth":8,"index":46,"name":"wheelFrontLeftRollOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[47],"primitives":null}
+{"depth":9,"index":47,"name":"wheelFrontLeftRollSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[40,41,42],"primitives":null}
+{"depth":10,"index":40,"name":"wheelFrontLeftRollPart0","mesh":10,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":32,"min":[-0.21491631865501404,-0.39999353885650635,-0.10953069478273392],"max":[0.21490725874900818,0.40004000067710876,0.10415565222501755],"extents":[0.4298235774040222,0.8000335395336151,0.21368634700775146]}]}
+{"depth":10,"index":41,"name":"wheelPainted_frontLeft","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_wheel","positionAccessor":38,"min":[-0.16718348860740662,-0.31120848655700684,-0.10817764699459076],"max":[0.16718801856040955,0.3111605942249298,0.10426434129476547],"extents":[0.33437150716781616,0.6223690807819366,0.21244198828935623]}]}
+{"depth":10,"index":42,"name":"wheelFrontLeftRollPart2","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":41,"min":[-0.20370586216449738,-0.3791452944278717,-0.11241646111011505],"max":[0.20370586216449738,0.3791850805282593,0.10698818415403366],"extents":[0.40741172432899475,0.758330374956131,0.2194046452641487]}]}
+{"depth":4,"index":39,"name":"wheelFrontLeftBrake","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[49],"primitives":null}
+{"depth":5,"index":49,"name":"wheelFrontLeftBrakeMirror","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[50],"primitives":null}
+{"depth":6,"index":50,"name":"wheelFrontLeftBrakeAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[51],"primitives":null}
+{"depth":7,"index":51,"name":"wheelFrontLeftBrakeAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[52],"primitives":null}
+{"depth":8,"index":52,"name":"wheelFrontLeftBrakeOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[53],"primitives":null}
+{"depth":9,"index":53,"name":"wheelFrontLeftBrakeSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[48],"primitives":null}
+{"depth":10,"index":48,"name":"wheelFrontLeftBrakePart0","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_brake","positionAccessor":35,"min":[-0.10242651402950287,-0.19067169725894928,-0.017711909487843513],"max":[0.1024310514330864,0.1906333565711975,0.03242853283882141],"extents":[0.20485756546258926,0.3813050538301468,0.050140442326664925]}]}
+{"depth":2,"index":54,"name":"wheelRearRight","mesh":null,"translation":[-0.9,-0.5,0.75],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[55,56],"primitives":null}
+{"depth":3,"index":55,"name":"wheelRearRightRoll","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[60],"primitives":null}
+{"depth":4,"index":60,"name":"wheelRearRightRollMirror","mesh":null,"translation":[0,0,0],"rotation":[0,1,0,0],"scale":[1,1,1],"children":[61],"primitives":null}
+{"depth":5,"index":61,"name":"wheelRearRightRollAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[62],"primitives":null}
+{"depth":6,"index":62,"name":"wheelRearRightRollAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[63],"primitives":null}
+{"depth":7,"index":63,"name":"wheelRearRightRollOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[64],"primitives":null}
+{"depth":8,"index":64,"name":"wheelRearRightRollSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[57,58,59],"primitives":null}
+{"depth":9,"index":57,"name":"wheelRearRightRollPart0","mesh":10,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":32,"min":[-0.21491631865501404,-0.39999353885650635,-0.10953069478273392],"max":[0.21490725874900818,0.40004000067710876,0.10415565222501755],"extents":[0.4298235774040222,0.8000335395336151,0.21368634700775146]}]}
+{"depth":9,"index":58,"name":"wheelPainted_rearRight","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_wheel","positionAccessor":38,"min":[-0.16718348860740662,-0.31120848655700684,-0.10817764699459076],"max":[0.16718801856040955,0.3111605942249298,0.10426434129476547],"extents":[0.33437150716781616,0.6223690807819366,0.21244198828935623]}]}
+{"depth":9,"index":59,"name":"wheelRearRightRollPart2","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":41,"min":[-0.20370586216449738,-0.3791452944278717,-0.11241646111011505],"max":[0.20370586216449738,0.3791850805282593,0.10698818415403366],"extents":[0.40741172432899475,0.758330374956131,0.2194046452641487]}]}
+{"depth":3,"index":56,"name":"wheelRearRightBrake","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[66],"primitives":null}
+{"depth":4,"index":66,"name":"wheelRearRightBrakeMirror","mesh":null,"translation":[0,0,0],"rotation":[0,1,0,0],"scale":[1,1,1],"children":[67],"primitives":null}
+{"depth":5,"index":67,"name":"wheelRearRightBrakeAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[68],"primitives":null}
+{"depth":6,"index":68,"name":"wheelRearRightBrakeAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[69],"primitives":null}
+{"depth":7,"index":69,"name":"wheelRearRightBrakeOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[70],"primitives":null}
+{"depth":8,"index":70,"name":"wheelRearRightBrakeSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[65],"primitives":null}
+{"depth":9,"index":65,"name":"wheelRearRightBrakePart0","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_brake","positionAccessor":35,"min":[-0.10242651402950287,-0.19067169725894928,-0.017711909487843513],"max":[0.1024310514330864,0.1906333565711975,0.03242853283882141],"extents":[0.20485756546258926,0.3813050538301468,0.050140442326664925]}]}
+{"depth":2,"index":71,"name":"wheelRearLeft","mesh":null,"translation":[-0.9,-0.5,-0.75],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[72,73],"primitives":null}
+{"depth":3,"index":72,"name":"wheelRearLeftRoll","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[77],"primitives":null}
+{"depth":4,"index":77,"name":"wheelRearLeftRollMirror","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[78],"primitives":null}
+{"depth":5,"index":78,"name":"wheelRearLeftRollAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[79],"primitives":null}
+{"depth":6,"index":79,"name":"wheelRearLeftRollAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[80],"primitives":null}
+{"depth":7,"index":80,"name":"wheelRearLeftRollOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[81],"primitives":null}
+{"depth":8,"index":81,"name":"wheelRearLeftRollSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[74,75,76],"primitives":null}
+{"depth":9,"index":74,"name":"wheelRearLeftRollPart0","mesh":10,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":32,"min":[-0.21491631865501404,-0.39999353885650635,-0.10953069478273392],"max":[0.21490725874900818,0.40004000067710876,0.10415565222501755],"extents":[0.4298235774040222,0.8000335395336151,0.21368634700775146]}]}
+{"depth":9,"index":75,"name":"wheelPainted_rearLeft","mesh":12,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_wheel","positionAccessor":38,"min":[-0.16718348860740662,-0.31120848655700684,-0.10817764699459076],"max":[0.16718801856040955,0.3111605942249298,0.10426434129476547],"extents":[0.33437150716781616,0.6223690807819366,0.21244198828935623]}]}
+{"depth":9,"index":76,"name":"wheelRearLeftRollPart2","mesh":13,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_tire","positionAccessor":41,"min":[-0.20370586216449738,-0.3791452944278717,-0.11241646111011505],"max":[0.20370586216449738,0.3791850805282593,0.10698818415403366],"extents":[0.40741172432899475,0.758330374956131,0.2194046452641487]}]}
+{"depth":3,"index":73,"name":"wheelRearLeftBrake","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[83],"primitives":null}
+{"depth":4,"index":83,"name":"wheelRearLeftBrakeMirror","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[84],"primitives":null}
+{"depth":5,"index":84,"name":"wheelRearLeftBrakeAxis","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[85],"primitives":null}
+{"depth":6,"index":85,"name":"wheelRearLeftBrakeAspect","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1.861306781646382,1,1],"children":[86],"primitives":null}
+{"depth":7,"index":86,"name":"wheelRearLeftBrakeOffset","mesh":null,"translation":[0.0000045299530029296875,-0.000023230910301208496,0.002714138478040695],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[87],"primitives":null}
+{"depth":8,"index":87,"name":"wheelRearLeftBrakeSource","mesh":null,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[82],"primitives":null}
+{"depth":9,"index":82,"name":"wheelRearLeftBrakePart0","mesh":11,"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1],"children":[],"primitives":[{"material":"su7_brake","positionAccessor":35,"min":[-0.10242651402950287,-0.19067169725894928,-0.017711909487843513],"max":[0.1024310514330864,0.1906333565711975,0.03242853283882141],"extents":[0.20485756546258926,0.3813050538301468,0.050140442326664925]}]}
 exit=0
-overall_exit=1
+overall_exit=0
