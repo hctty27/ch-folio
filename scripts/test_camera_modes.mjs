@@ -166,7 +166,7 @@ test('chase camera constants match the external view contract', () =>
         minDistance: 4.5,
         maxDistance: 11,
         height: 2.8,
-        overlookPitch: Math.PI / 18,
+        overlookPitch: Math.PI / 12,
         lookAhead: 3,
         targetHeight: 0.9,
         positionDamping: 7,
