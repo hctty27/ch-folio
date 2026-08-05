@@ -94,8 +94,3 @@ export const VEHICLE_CONFIG = deepFreeze({
     maxCcdSubsteps: 2,
     additionalSolverIterations: 2,
 })
-
-export {
-    applyVehicleInput,
-    createQuantizedInputFromPlayer,
-} from './vehicleInput.js'
