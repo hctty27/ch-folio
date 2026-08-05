@@ -4,7 +4,7 @@ export interface RapierSmokeResult
     snapshotBytes: number
 }
 
-type RapierModule = typeof import('@dimforge/rapier3d')
+type RapierModule = typeof import('@dimforge/rapier3d').default
 
 export function runRapierSmoke(RAPIER: RapierModule): RapierSmokeResult
 {
