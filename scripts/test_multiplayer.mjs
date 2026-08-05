@@ -190,14 +190,14 @@ test('remote players owns creation, update and cleanup of remote vehicles', asyn
     assert.match(source, /update\(/)
 })
 
-test('server transport supports rooms, guarded reconnect and explicit shutdown', async () =>
+test('multiplayer server transport supports rooms, guarded reconnect and explicit shutdown', async () =>
 {
     const source = await readFile(
-        new URL('../sources/Game/Server.js', import.meta.url),
+        new URL('../sources/Game/Multiplayer/Server.js', import.meta.url),
         'utf8',
     )
 
-    assert.match(source, /start\(\{\s*room\s*=\s*['"]public['"]\s*\}\s*=\s*\{\}\)/)
+    assert.match(source, /start\(\{\s*url,\s*room\s*=\s*['"]public['"]\s*\}\s*=\s*\{\}\)/)
     assert.match(source, /searchParams\.set\(['"]room['"],\s*this\.room\)/)
     assert.match(source, /this\.connecting/)
     assert.match(source, /scheduleReconnect\(/)
