@@ -5,15 +5,11 @@
   "type": "module",
   "scripts": {
     "prepare:rapier": "node scripts/prepare-rapier-worker.mjs",
-    "predev": "npm run prepare:rapier",
     "dev": "wrangler dev",
-    "predeploy": "npm run prepare:rapier",
     "deploy": "wrangler deploy",
-    "predry-run": "npm run prepare:rapier",
     "dry-run": "wrangler deploy --dry-run",
     "pretest": "npm run prepare:rapier",
     "test": "vitest run --config vitest.config.ts",
-    "pretypes": "npm run prepare:rapier",
     "types": "wrangler types",
     "check": "npm run types && tsc --noEmit"
   },
