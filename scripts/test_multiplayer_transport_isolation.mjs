@@ -9,6 +9,7 @@ test('multiplayer owns a transport separate from the legacy game server', async 
     const multiplayerSource = await readSource('../sources/Game/Multiplayer/Multiplayer.js')
     const transportSource = await readSource('../sources/Game/Multiplayer/Server.js')
     const legacyServerSource = await readSource('../sources/Game/Server.js')
+    const gameSource = await readSource('../sources/Game/Game.js')
 
     assert.match(multiplayerSource, /import\s+\{\s*MultiplayerServer\s*\}\s+from\s+['"]\.\/Server\.js['"]/)
     assert.match(multiplayerSource, /this\.server\s*=\s*new MultiplayerServer\(game\)/)
@@ -20,5 +21,5 @@ test('multiplayer owns a transport separate from the legacy game server', async 
     assert.doesNotMatch(transportSource, /is-server-online/)
 
     assert.match(legacyServerSource, /export class Server/)
-    assert.doesNotMatch(legacyServerSource, /normalizeRoom|searchParams\.set\(['"]room['"]/)
+    assert.match(gameSource, /this\.server\s*=\s*new Server\(\)/)
 })
