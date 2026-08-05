@@ -1,6 +1,7 @@
 const JSON_CHUNK_TYPE = 0x4E4F534A
 const GLB_MAGIC = 'glTF'
 const GLB_VERSION = 2
+export const SU7_VISUAL_WHEEL_DIAMETER = 0.72
 
 export const SU7_WHEEL_SLOTS = Object.freeze([
     Object.freeze({ key: 'frontRight', rootName: 'wheelFrontRight', position: [0.9, -0.5, 0.75], front: true, mirror: true }),
@@ -319,10 +320,9 @@ export function prepareSU7FourWheelDocument(document)
     const extents = rollBounds.min.map((value, axis) => rollBounds.max[axis] - value)
     const axleAxis = extents.indexOf(Math.min(...extents))
     const axisCorrection = quaternionForAxisCorrection(axleAxis)
-    const rollingPlaneAxes = [0, 1, 2].filter((axis) => axis !== axleAxis)
-    const rollingDiameter = Math.max(...rollingPlaneAxes.map((axis) => extents[axis]))
+    const targetVisualDiameter = SU7_VISUAL_WHEEL_DIAMETER
     const aspectScale = extents.map((extent, axis) =>
-        axis === axleAxis ? 1 : rollingDiameter / extent)
+        axis === axleAxis ? 1 : targetVisualDiameter / extent)
 
     const cloneMeshNodes = (items, slot, rolePrefix) => items.map((item, itemIndex) =>
     {
@@ -397,12 +397,13 @@ export function prepareSU7FourWheelDocument(document)
     document.asset ??= { version: '2.0' }
     document.asset.extras ??= {}
     document.asset.extras.chFolioSU7FourWheel = {
-        version: 1,
+        version: 2,
         source: 'wheelContainer/wheelCylinder',
         center,
         extents,
         originalAxleAxis: ['x', 'y', 'z'][axleAxis],
         runtimeRollAxis: 'z',
+        targetVisualDiameter,
         aspectScale,
     }
 
@@ -411,6 +412,7 @@ export function prepareSU7FourWheelDocument(document)
         center,
         extents,
         axleAxis: ['x', 'y', 'z'][axleAxis],
+        targetVisualDiameter,
         aspectScale,
     }
 }

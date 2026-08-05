@@ -1,4 +1,6 @@
 
+### npm run test:wheels
+
 > bruno-simon-folio-2025@0.0.0 test:wheels
 > node --test scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs
 
@@ -9,97 +11,539 @@ TAP version 13
 # Subtest: hides legacy clones and drives four SU7 wheel roots
 ok 1 - hides legacy clones and drives four SU7 wheel roots
   ---
-  duration_ms: 5.920112
+  duration_ms: 3.972611
   type: 'test'
   ...
 # Subtest: uses the same roll direction for all normalized wheel pivots
 ok 2 - uses the same roll direction for all normalized wheel pivots
   ---
-  duration_ms: 2.273138
+  duration_ms: 2.112828
   type: 'test'
   ...
 # Subtest: only front wheels receive steering rotation
 ok 3 - only front wheels receive steering rotation
   ---
-  duration_ms: 1.213969
+  duration_ms: 0.670633
   type: 'test'
   ...
 # Subtest: creates four independent wheel roots in physical wheel order
 ok 4 - creates four independent wheel roots in physical wheel order
   ---
-  duration_ms: 6.219471
+  duration_ms: 4.098458
   type: 'test'
   ...
 # Subtest: keeps rolling meshes below roll pivot and brake meshes outside it
 ok 5 - keeps rolling meshes below roll pivot and brake meshes outside it
   ---
-  duration_ms: 1.365692
+  duration_ms: 0.840613
   type: 'test'
   ...
 # Subtest: fits the visual wheel to a 0.72 diameter while keeping it circular
-not ok 6 - fits the visual wheel to a 0.72 diameter while keeping it circular
+ok 6 - fits the visual wheel to a 0.72 diameter while keeping it circular
   ---
-  duration_ms: 2.501133
+  duration_ms: 0.700228
   type: 'test'
-  location: '/home/runner/work/ch-folio/ch-folio/scripts/test_su7_four_wheel_glb.mjs:109:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly equal:
-    + actual - expected
-    
-    + undefined
-    - 0.72
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: 0.72
-  operator: 'strictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/ch-folio/ch-folio/scripts/test_su7_four_wheel_glb.mjs:121:12)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: bakes non-Z source axle into a dedicated correction node
 ok 7 - bakes non-Z source axle into a dedicated correction node
   ---
-  duration_ms: 0.874905
+  duration_ms: 0.570445
   type: 'test'
   ...
 # Subtest: is idempotent and preserves the legacy template for fallback
 ok 8 - is idempotent and preserves the legacy template for fallback
   ---
-  duration_ms: 2.188168
+  duration_ms: 1.110411
   type: 'test'
   ...
 # Subtest: rewrites only the JSON chunk and preserves binary bytes
 ok 9 - rewrites only the JSON chunk and preserves binary bytes
   ---
-  duration_ms: 1.827825
+  duration_ms: 1.298315
   type: 'test'
   ...
 # Subtest: discovers SU7 wheel nodes in physical wheel index order
 ok 10 - discovers SU7 wheel nodes in physical wheel index order
   ---
-  duration_ms: 2.45654
+  duration_ms: 2.525645
   type: 'test'
   ...
 # Subtest: falls back atomically when any required SU7 wheel node is missing
 ok 11 - falls back atomically when any required SU7 wheel node is missing
   ---
-  duration_ms: 1.17773
+  duration_ms: 0.587997
   type: 'test'
   ...
 1..11
 # tests 11
 # suites 0
-# pass 10
-# fail 1
+# pass 11
+# fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 96.37933
-exit=1
+# duration_ms 96.163603
+exit=0
+
+### npm test
+
+> bruno-simon-folio-2025@0.0.0 test
+> npm run test:js && npm run test:su7-convert
+
+
+> bruno-simon-folio-2025@0.0.0 test:js
+> node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs
+
+TAP version 13
+# Subtest: camera toggle help uses C and the Chinese settings label
+ok 1 - camera toggle help uses C and the Chinese settings label
+  ---
+  duration_ms: 2.248844
+  type: 'test'
+  ...
+# Subtest: camera toggle help is appended to keyboard and mouse controls once
+ok 2 - camera toggle help is appended to keyboard and mouse controls once
+  ---
+  duration_ms: 0.409622
+  type: 'test'
+  ...
+# Subtest: camera toggle help waits for DOMContentLoaded when needed
+ok 3 - camera toggle help waits for DOMContentLoaded when needed
+  ---
+  duration_ms: 0.331313
+  type: 'test'
+  ...
+# Subtest: application entry installs the camera toggle controls help
+ok 4 - application entry installs the camera toggle controls help
+  ---
+  duration_ms: 9.574549
+  type: 'test'
+  ...
+# Subtest: camera modes cycle default, chase, cockpit, then default
+ok 5 - camera modes cycle default, chase, cockpit, then default
+  ---
+  duration_ms: 1.5451
+  type: 'test'
+  ...
+# Subtest: default chase pose uses the configured overlook pitch
+ok 6 - default chase pose uses the configured overlook pitch
+  ---
+  duration_ms: 0.597535
+  type: 'test'
+  ...
+# Subtest: chase pose rotates behind the vehicle in world space
+ok 7 - chase pose rotates behind the vehicle in world space
+  ---
+  duration_ms: 0.20162
+  type: 'test'
+  ...
+# Subtest: look quaternion points the camera negative Z axis at its target
+ok 8 - look quaternion points the camera negative Z axis at its target
+  ---
+  duration_ms: 0.419841
+  type: 'test'
+  ...
+# Subtest: chase distance is clamped to configured limits
+ok 9 - chase distance is clamped to configured limits
+  ---
+  duration_ms: 0.15879
+  type: 'test'
+  ...
+# Subtest: orbit return moves yaw and pitch toward rest without overshooting
+ok 10 - orbit return moves yaw and pitch toward rest without overshooting
+  ---
+  duration_ms: 0.24921
+  type: 'test'
+  ...
+# Subtest: chase pose damping advances position and rotation independently
+ok 11 - chase pose damping advances position and rotation independently
+  ---
+  duration_ms: 0.370037
+  type: 'test'
+  ...
+# Subtest: chase camera constants match the external view contract
+ok 12 - chase camera constants match the external view contract
+  ---
+  duration_ms: 0.156855
+  type: 'test'
+  ...
+# Subtest: controller resolves R3 after the view registers zoomToggle asynchronously
+ok 13 - controller resolves R3 after the view registers zoomToggle asynchronously
+  ---
+  duration_ms: 0.625568
+  type: 'test'
+  ...
+# Subtest: runtime modules expose one camera toggle owner and explicit view lifecycles
+ok 14 - runtime modules expose one camera toggle owner and explicit view lifecycles
+  ---
+  duration_ms: 15.583502
+  type: 'test'
+  ...
+# Subtest: computeCockpitPose keeps the local position when the vehicle has no transform
+ok 15 - computeCockpitPose keeps the local position when the vehicle has no transform
+  ---
+  duration_ms: 1.844894
+  type: 'test'
+  ...
+# Subtest: computeCockpitPose rotates the driver offset into vehicle world space
+ok 16 - computeCockpitPose rotates the driver offset into vehicle world space
+  ---
+  duration_ms: 0.329971
+  type: 'test'
+  ...
+# Subtest: rigid cockpit pose follows vehicle translation exactly
+ok 17 - rigid cockpit pose follows vehicle translation exactly
+  ---
+  duration_ms: 0.347264
+  type: 'test'
+  ...
+# Subtest: cockpit uses an isolated view mode and a fixed balanced projection
+ok 18 - cockpit uses an isolated view mode and a fixed balanced projection
+  ---
+  duration_ms: 0.9878
+  type: 'test'
+  ...
+# Subtest: default correction points a Three.js camera toward the vehicle positive X axis
+ok 19 - default correction points a Three.js camera toward the vehicle positive X axis
+  ---
+  duration_ms: 0.258918
+  type: 'test'
+  ...
+# Subtest: physical fallback moves forward while retaining centered eye height
+ok 20 - physical fallback moves forward while retaining centered eye height
+  ---
+  duration_ms: 0.186251
+  type: 'test'
+  ...
+# Subtest: fallback rest pitch looks forward and slightly toward the road
+ok 21 - fallback rest pitch looks forward and slightly toward the road
+  ---
+  duration_ms: 0.517685
+  type: 'test'
+  ...
+# Subtest: computeCockpitPose does not mutate vehicle or head quaternions
+ok 22 - computeCockpitPose does not mutate vehicle or head quaternions
+  ---
+  duration_ms: 0.285508
+  type: 'test'
+  ...
+# Subtest: dampingAlpha is frame-rate independent and bounded
+ok 23 - dampingAlpha is frame-rate independent and bounded
+  ---
+  duration_ms: 0.594389
+  type: 'test'
+  ...
+# Subtest: dampCockpitPose keeps independent smoothing state between frames
+ok 24 - dampCockpitPose keeps independent smoothing state between frames
+  ---
+  duration_ms: 0.931824
+  type: 'test'
+  ...
+# Subtest: materializeVehicle joins ordered chunks and writes both GLB targets
+ok 25 - materializeVehicle joins ordered chunks and writes both GLB targets
+  ---
+  duration_ms: 17.725437
+  type: 'test'
+  ...
+# Subtest: materializeVehicle rejects an incomplete chunk sequence before decompression
+ok 26 - materializeVehicle rejects an incomplete chunk sequence before decompression
+  ---
+  duration_ms: 3.414149
+  type: 'test'
+  ...
+# Subtest: multiplayer protocol exposes stable version, message types and flags
+ok 27 - multiplayer protocol exposes stable version, message types and flags
+  ---
+  duration_ms: 3.215084
+  type: 'test'
+  ...
+# Subtest: state message clamps values and normalizes quaternion
+ok 28 - state message clamps values and normalizes quaternion
+  ---
+  duration_ms: 0.725045
+  type: 'test'
+  ...
+# Subtest: state message rejects non-finite vectors and zero quaternions
+ok 29 - state message rejects non-finite vectors and zero quaternions
+  ---
+  duration_ms: 0.539746
+  type: 'test'
+  ...
+# Subtest: snapshot buffer ignores stale sequences and remains bounded
+ok 30 - snapshot buffer ignores stale sequences and remains bounded
+  ---
+  duration_ms: 0.405343
+  type: 'test'
+  ...
+# Subtest: snapshot buffer interpolates position, scalars and quaternion at render delay
+ok 31 - snapshot buffer interpolates position, scalars and quaternion at render delay
+  ---
+  duration_ms: 0.515661
+  type: 'test'
+  ...
+# Subtest: snapshot quaternion interpolation uses the shortest path
+ok 32 - snapshot quaternion interpolation uses the shortest path
+  ---
+  duration_ms: 0.203773
+  type: 'test'
+  ...
+# Subtest: remote vehicle is render-only and animates SU7 wheel nodes
+ok 33 - remote vehicle is render-only and animates SU7 wheel nodes
+  ---
+  duration_ms: 12.398659
+  type: 'test'
+  ...
+# Subtest: remote players owns creation, update and cleanup of remote vehicles
+ok 34 - remote players owns creation, update and cleanup of remote vehicles
+  ---
+  duration_ms: 2.714031
+  type: 'test'
+  ...
+# Subtest: server transport supports rooms, guarded reconnect and explicit shutdown
+ok 35 - server transport supports rooms, guarded reconnect and explicit shutdown
+  ---
+  duration_ms: 3.719934
+  type: 'test'
+  ...
+# Subtest: multiplayer publishes at 12 Hz and clears remote players on disconnect
+ok 36 - multiplayer publishes at 12 Hz and clears remote players on disconnect
+  ---
+  duration_ms: 2.520226
+  type: 'test'
+  ...
+# Subtest: multiplayer resolves the loaded local visual chassis as its clone template
+ok 37 - multiplayer resolves the loaded local visual chassis as its clone template
+  ---
+  duration_ms: 1.87971
+  type: 'test'
+  ...
+# Subtest: application bootstrap keeps multiplayer optional and exposes it for public debugging
+ok 38 - application bootstrap keeps multiplayer optional and exposes it for public debugging
+  ---
+  duration_ms: 1.744094
+  type: 'test'
+  ...
+# Subtest: multiplayer owns a transport separate from the legacy game server
+ok 39 - multiplayer owns a transport separate from the legacy game server
+  ---
+  duration_ms: 8.291374
+  type: 'test'
+  ...
+# [SU7FourWheelController] using four independent SU7 wheel nodes
+# [SU7FourWheelController] using four independent SU7 wheel nodes
+# [SU7FourWheelController] using four independent SU7 wheel nodes
+# Subtest: hides legacy clones and drives four SU7 wheel roots
+ok 40 - hides legacy clones and drives four SU7 wheel roots
+  ---
+  duration_ms: 3.70156
+  type: 'test'
+  ...
+# Subtest: uses the same roll direction for all normalized wheel pivots
+ok 41 - uses the same roll direction for all normalized wheel pivots
+  ---
+  duration_ms: 1.414994
+  type: 'test'
+  ...
+# Subtest: only front wheels receive steering rotation
+ok 42 - only front wheels receive steering rotation
+  ---
+  duration_ms: 0.615379
+  type: 'test'
+  ...
+# Subtest: creates four independent wheel roots in physical wheel order
+ok 43 - creates four independent wheel roots in physical wheel order
+  ---
+  duration_ms: 5.602348
+  type: 'test'
+  ...
+# Subtest: keeps rolling meshes below roll pivot and brake meshes outside it
+ok 44 - keeps rolling meshes below roll pivot and brake meshes outside it
+  ---
+  duration_ms: 0.955389
+  type: 'test'
+  ...
+# Subtest: fits the visual wheel to a 0.72 diameter while keeping it circular
+ok 45 - fits the visual wheel to a 0.72 diameter while keeping it circular
+  ---
+  duration_ms: 0.7277
+  type: 'test'
+  ...
+# Subtest: bakes non-Z source axle into a dedicated correction node
+ok 46 - bakes non-Z source axle into a dedicated correction node
+  ---
+  duration_ms: 0.549024
+  type: 'test'
+  ...
+# Subtest: is idempotent and preserves the legacy template for fallback
+ok 47 - is idempotent and preserves the legacy template for fallback
+  ---
+  duration_ms: 1.12067
+  type: 'test'
+  ...
+# Subtest: rewrites only the JSON chunk and preserves binary bytes
+ok 48 - rewrites only the JSON chunk and preserves binary bytes
+  ---
+  duration_ms: 1.123115
+  type: 'test'
+  ...
+# Subtest: discovers SU7 wheel nodes in physical wheel index order
+ok 49 - discovers SU7 wheel nodes in physical wheel index order
+  ---
+  duration_ms: 1.993454
+  type: 'test'
+  ...
+# Subtest: falls back atomically when any required SU7 wheel node is missing
+ok 50 - falls back atomically when any required SU7 wheel node is missing
+  ---
+  duration_ms: 0.444967
+  type: 'test'
+  ...
+1..50
+# tests 50
+# suites 0
+# pass 50
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 301.348931
+
+> bruno-simon-folio-2025@0.0.0 test:su7-convert
+> PYTHONPATH=scripts python3 -m unittest scripts/test_convert_su7.py -v
+
+test_exported_scene_contains_nodes_required_by_visual_vehicle (scripts.test_convert_su7.ConvertSu7Test.test_exported_scene_contains_nodes_required_by_visual_vehicle) ... ok
+test_vehicle_transform_maps_axles_and_wheel_center_to_game_coordinates (scripts.test_convert_su7.ConvertSu7Test.test_vehicle_transform_maps_axles_and_wheel_center_to_game_coordinates) ... ok
+test_vertex_clustering_reduces_faces_without_degenerate_triangles (scripts.test_convert_su7.ConvertSu7Test.test_vertex_clustering_reduces_faces_without_degenerate_triangles) ... ok
+test_wheel_template_is_parked_outside_the_playable_scene (scripts.test_convert_su7.ConvertSu7Test.test_wheel_template_is_parked_outside_the_playable_scene) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.072s
+
+OK
+exit=0
+
+### npm run build
+
+> bruno-simon-folio-2025@0.0.0 prebuild
+> npm install --no-save --package-lock=true --ignore-scripts --prefer-offline --audit=false --fund=false stylus@0.64.0
+
+
+up to date in 517ms
+
+> bruno-simon-folio-2025@0.0.0 build
+> npm run prepare:wheels && npm run prepare:cockpit && vite build --mode production
+
+
+> bruno-simon-folio-2025@0.0.0 prepare:wheels
+> node scripts/prepare-su7-four-wheels.mjs
+
+[su7-four-wheels] {
+  input: 'static/vehicle/default.glb',
+  changed: true,
+  axleAxis: 'z',
+  center: [
+    -0.0000045299530029296875,
+    0.000023230910301208496,
+    -0.002714138478040695
+  ],
+  extents: [ 0.4298235774040222, 0.8000335395336151, 0.2194046452641487 ]
+}
+[su7-four-wheels] {
+  input: 'static/vehicle/default-compressed.glb',
+  changed: true,
+  axleAxis: 'z',
+  center: [
+    -0.0000045299530029296875,
+    0.000023230910301208496,
+    -0.002714138478040695
+  ],
+  extents: [ 0.4298235774040222, 0.8000335395336151, 0.2194046452641487 ]
+}
+
+> bruno-simon-folio-2025@0.0.0 prepare:cockpit
+> node scripts/generate-cockpit-config.mjs
+
+[cockpit-config] {
+  generatedAt: '2026-08-05T03:56:50.979Z',
+  nodeCount: 88,
+  meshCount: 14,
+  materialCount: 11,
+  anchorNodeNames: [],
+  interiorNodeNames: [
+    'common_glass',
+    'wheelFrontRightRollMirror',
+    'wheelFrontRightBrakeMirror',
+    'wheelFrontLeftRollMirror',
+    'wheelFrontLeftBrakeMirror',
+    'wheelRearRightRollMirror',
+    'wheelRearRightBrakeMirror',
+    'wheelRearLeftRollMirror',
+    'wheelRearLeftBrakeMirror',
+    'su7_glass'
+  ],
+  steeringWheelNodeNames: []
+}
+[36mvite v7.2.4 [32mbuilding client environment for production...[36m[39m
+[33m[1m(!) %VITE_ANALYTICS_TAG% is not defined in env variables found in /index.html. Is the variable mistyped?[22m[39m
+transforming...
+
+../fonts/Pally-Regular.woff2 referenced in ../fonts/Pally-Regular.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Medium.woff2 referenced in ../fonts/Pally-Medium.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Bold.woff2 referenced in ../fonts/Pally-Bold.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/mouse-keyboard.svg referenced in ../ui/controls/mouse-keyboard.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/touch.svg referenced in ../ui/controls/touch.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad.svg referenced in ../ui/controls/gamepad.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/achievements/check.svg referenced in ../ui/achievements/check.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-circle.webp referenced in ../ui/controls/gamepad-circle.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-triangle.webp referenced in ../ui/controls/gamepad-triangle.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-square.webp referenced in ../ui/controls/gamepad-square.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/controls/gamepad-cross.webp referenced in ../ui/controls/gamepad-cross.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/actions/actions-icon-arrow.webp referenced in ../ui/actions/actions-icon-arrow.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/actions/actions-icon-close.webp referenced in ../ui/actions/actions-icon-close.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/actions/actions-icon-open.webp referenced in ../ui/actions/actions-icon-open.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/music-note.svg referenced in ../ui/music-note.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../ui/map/player.webp referenced in ../ui/map/player.webp didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Regular.woff referenced in ../fonts/Pally-Regular.woff didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Medium.woff referenced in ../fonts/Pally-Medium.woff didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Bold.woff referenced in ../fonts/Pally-Bold.woff didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Regular.ttf referenced in ../fonts/Pally-Regular.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Medium.ttf referenced in ../fonts/Pally-Medium.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+
+../fonts/Pally-Bold.ttf referenced in ../fonts/Pally-Bold.ttf didn't resolve at build time, it will remain unchanged to be resolved at runtime
+[32m✓[39m 795 modules transformed.
+[33mnode_modules/vm-browserify/index.js (110:11): Use of eval in "node_modules/vm-browserify/index.js" is strongly discouraged as it poses security risks and may cause issues with minification.[39m
+rendering chunks...
+computing gzip size...
+[2m../dist/[22m[32mindex.html                             [39m[1m[2m   58.82 kB[22m[1m[22m[2m │ gzip:     8.41 kB[22m
+[2m../dist/[22m[2massets/[22m[32mrapier_wasm3d_bg-0Vyjx73g.wasm  [39m[1m[2m1,698.49 kB[22m[1m[22m[2m │ gzip:   627.43 kB[22m
+[2m../dist/[22m[2massets/[22m[35mindex-Di03QkGT.css              [39m[1m[2m   40.26 kB[22m[1m[22m[2m │ gzip:     6.52 kB[22m
+[2m../dist/[22m[2massets/[22m[36mrapier-6phlxflF.js              [39m[1m[2m  229.92 kB[22m[1m[22m[2m │ gzip:    34.80 kB[22m
+[2m../dist/[22m[2massets/[22m[36mindex-BtUrPbHa.js               [39m[1m[33m4,935.03 kB[39m[22m[2m │ gzip: 1,048.00 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 17.36s[39m
+exit=0
+overall_exit=0
