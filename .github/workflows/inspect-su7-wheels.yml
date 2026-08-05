@@ -31,21 +31,44 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Install Node dependencies
-        run: npm clean-install --progress=false
-      - name: Capture runtime position regression
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-su7.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install -r scripts/requirements-su7.txt
+          npm clean-install --progress=false
+      - name: Test, build, and inspect
         shell: bash
         run: |
           set +e
           mkdir -p docs/diagnostics
           report=docs/diagnostics/su7-wheel-runtime-position-regression.txt
-          npm run test:wheels > "$report" 2>&1
-          status=$?
-          echo "exit=$status" >> "$report"
-          cat "$report"
+          : > "$report"
+          status=0
+
+          run_and_record() {
+            echo >> "$report"
+            echo "### $*" | tee -a "$report"
+            "$@" 2>&1 | tee -a "$report"
+            code=${PIPESTATUS[0]}
+            echo "exit=$code" | tee -a "$report"
+            if [ "$code" -ne 0 ]; then
+              status="$code"
+            fi
+          }
+
+          run_and_record npm run test:wheels
+          run_and_record npm test
+          run_and_record npm run build
+          run_and_record node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
+          echo "overall_exit=$status" | tee -a "$report"
+
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add "$report"
-          git commit -m "chore: record SU7 runtime wheel position regression" || true
+          git commit -m "chore: record verified SU7 runtime wheelbase fix" || true
           git push || true
           exit "$status"
