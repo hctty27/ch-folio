@@ -88,6 +88,17 @@ export function decodeFullSyncFrame(value)
 export { AuthoritativeWorld } from './AuthoritativeWorld.js'
 
 export {
+    checksum32,
+    hashWorldSnapshot,
+    readCanonicalState,
+} from './canonicalState.js'
+
+export {
+    CheckpointRing,
+    InputHistory,
+} from './checkpoints.js'
+
+export {
     dequantizeInput,
     packSuspensions,
     quantizeInput,
