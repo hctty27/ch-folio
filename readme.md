@@ -19,6 +19,32 @@ npm run dev
 npm run build
 ```
 
+## Multiplayer
+
+Multiplayer is optional and does not affect local driving when disabled. The MVP uses a Cloudflare Worker plus one hibernatable Durable Object per room.
+
+Deploy the backend from `multiplayer-worker/`:
+
+```bash
+cd multiplayer-worker
+npm install
+npm test
+npm run check
+npm run deploy
+```
+
+Then copy `.env.multiplayer.example` values into the frontend `.env` and set the deployed Worker hostname:
+
+```env
+VITE_MULTIPLAYER_ENABLED=1
+VITE_SERVER_URL=wss://ch-folio-multiplayer.<account-subdomain>.workers.dev/ws
+VITE_MULTIPLAYER_ROOM=public
+```
+
+Rebuild the frontend after changing `VITE_*` variables. Open two browser sessions in the same room to verify remote SU7 movement. The first release synchronizes vehicle transforms, steering, wheel rotation and braking at 12 Hz with a 100 ms interpolation buffer; remote vehicles do not have Rapier collision bodies.
+
+See `multiplayer-worker/README.md` for deployment and smoke-test details.
+
 ## Game loop
 
 #### 0
@@ -74,6 +100,7 @@ npm run build
 
 #### 10
 
+- Multiplayer remote vehicles
 - Area++ (View, PhysicalVehicle:post-physics, Player:post-physics, Wind)
 - Foliage (VisualVehicle, View)
 - Fog (View)
@@ -148,4 +175,4 @@ Will do the following
 
 - https://gltf-transform.dev/cli
 - https://github.com/KhronosGroup/KTX-Software?tab=readme-ov-file
-- https://github.khronos.org/KTX-Software/ktxtools/toktx.html
+- https://github.khronos.org/KTX-Software/tree/main/tools/ktxtools/toktx.html
