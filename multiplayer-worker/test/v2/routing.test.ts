@@ -61,6 +61,7 @@ async function openSocket(url: string): Promise<WebSocket>
     expect(response.webSocket).not.toBeNull()
 
     const socket = response.webSocket!
+    socket.binaryType = 'arraybuffer'
     socket.accept()
     return socket
 }
