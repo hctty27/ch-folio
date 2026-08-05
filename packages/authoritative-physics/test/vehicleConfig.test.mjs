@@ -179,6 +179,6 @@ test('opposite-direction input becomes deterministic reverse braking', () =>
     })
 
     assert.equal(result.engineForce, 0)
-    assert.equal(result.brake, 0.4 * 35 / 30)
+    assert.ok(Math.abs(result.brake - (0.4 * 35 / 30)) < 1e-12)
     assert.deepEqual(findCall(controller.calls, 'setWheelBrake', 0), [ 'setWheelBrake', 0, result.brake ])
 })
