@@ -33,7 +33,7 @@ function entity(entityOrder)
     return {
         entityOrder,
         slotState: 1,
-        spawnIndex: entityOrder,
+        spawnIndex: entityOrder - 1,
         flags: 0,
         playerId: 100 + entityOrder,
         lastConfirmedSequence: 0,
@@ -62,7 +62,7 @@ test('state frames require strictly increasing entityOrder', () =>
             serverTick: 1,
             eventCursor: 0,
             checksum32: 0,
-            states: [ state(1), state(0) ],
+            states: [ state(2), state(1) ],
             events: [],
         }),
         (error) => error instanceof ProtocolError && /sorted entityOrder/.test(error.message),
@@ -83,7 +83,7 @@ test('full sync requires ordered descriptors and canonical queued-input order', 
     assert.throws(
         () => encodeFullSyncFrame({
             ...base,
-            entities: [ entity(1), entity(0) ],
+            entities: [ entity(2), entity(1) ],
             queuedInputs: [],
         }),
         (error) => error instanceof ProtocolError && /sorted entityOrder/.test(error.message),
@@ -92,10 +92,10 @@ test('full sync requires ordered descriptors and canonical queued-input order', 
     assert.throws(
         () => encodeFullSyncFrame({
             ...base,
-            entities: [ entity(0), entity(1) ],
+            entities: [ entity(1), entity(2) ],
             queuedInputs: [
+                { entityOrder: 2, input: input(5, 1) },
                 { entityOrder: 1, input: input(5, 1) },
-                { entityOrder: 0, input: input(5, 1) },
             ],
         }),
         (error) => error instanceof ProtocolError && /queued inputs.*canonical order/i.test(error.message),
