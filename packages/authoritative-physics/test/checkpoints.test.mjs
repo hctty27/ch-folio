@@ -97,6 +97,12 @@ test('canonical state sorts entities, frounds physical values, and excludes runt
         () => readCanonicalState([ state(1), state(1) ]),
         /duplicate entityOrder 1/,
     )
+    assert.throws(
+        () => readCanonicalState([ state(1, {
+            position: [ Number.MAX_VALUE, 0, 0 ],
+        }) ]),
+        /finite float32/,
+    )
 })
 
 test('checksum32 uses stable FNV-1a over the fixed canonical record layout', () =>
