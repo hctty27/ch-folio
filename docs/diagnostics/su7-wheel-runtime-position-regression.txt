@@ -7,120 +7,84 @@ TAP version 13
 # [SU7FourWheelController] using four independent SU7 wheel nodes
 # [SU7FourWheelController] using four independent SU7 wheel nodes
 # Subtest: hides legacy clones and preserves the corrected SU7 visual wheelbase
-not ok 1 - hides legacy clones and preserves the corrected SU7 visual wheelbase
+ok 1 - hides legacy clones and preserves the corrected SU7 visual wheelbase
   ---
-  duration_ms: 3.669631
+  duration_ms: 6.712405
   type: 'test'
-  location: '/home/runner/work/ch-folio/ch-folio/scripts/test_su7_four_wheel_controller.mjs:87:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly deep-equal:
-    + actual - expected
-    
-      [
-    +   0.9,
-    +   0.9,
-    +   -0.9,
-    +   -0.9
-    -   1.05,
-    -   1.05,
-    -   -1.05,
-    -   -1.05
-      ]
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-    0: 1.05
-    1: 1.05
-    2: -1.05
-    3: -1.05
-  actual:
-    0: 0.9
-    1: 0.9
-    2: -0.9
-    3: -0.9
-  operator: 'deepStrictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/ch-folio/ch-folio/scripts/test_su7_four_wheel_controller.mjs:95:12)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.start (node:internal/test_runner/test:944:17)
-    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
   ...
 # Subtest: uses the same roll direction for all normalized wheel pivots
 ok 2 - uses the same roll direction for all normalized wheel pivots
   ---
-  duration_ms: 1.124267
+  duration_ms: 2.659257
   type: 'test'
   ...
 # Subtest: only front wheels receive steering rotation
 ok 3 - only front wheels receive steering rotation
   ---
-  duration_ms: 0.531948
+  duration_ms: 1.532469
   type: 'test'
   ...
 # Subtest: creates four independent wheel roots in physical wheel order
 ok 4 - creates four independent wheel roots in physical wheel order
   ---
-  duration_ms: 4.369906
+  duration_ms: 5.644856
   type: 'test'
   ...
 # Subtest: wraps body meshes in a visual correction and moves wheel centers with the stretched body
 ok 5 - wraps body meshes in a visual correction and moves wheel centers with the stretched body
   ---
-  duration_ms: 0.91286
+  duration_ms: 1.074139
   type: 'test'
   ...
 # Subtest: keeps rolling meshes below roll pivot and brake meshes outside it
 ok 6 - keeps rolling meshes below roll pivot and brake meshes outside it
   ---
-  duration_ms: 1.023164
+  duration_ms: 1.176483
   type: 'test'
   ...
 # Subtest: fits the visual wheel to a 0.72 diameter while keeping it circular
 ok 7 - fits the visual wheel to a 0.72 diameter while keeping it circular
   ---
-  duration_ms: 0.636955
+  duration_ms: 0.724422
   type: 'test'
   ...
 # Subtest: bakes non-Z source axle into a dedicated correction node
 ok 8 - bakes non-Z source axle into a dedicated correction node
   ---
-  duration_ms: 1.241394
+  duration_ms: 2.018171
   type: 'test'
   ...
 # Subtest: is idempotent and preserves the legacy template for fallback
 ok 9 - is idempotent and preserves the legacy template for fallback
   ---
-  duration_ms: 0.427637
+  duration_ms: 0.442887
   type: 'test'
   ...
 # Subtest: rewrites only the JSON chunk and preserves binary bytes
 ok 10 - rewrites only the JSON chunk and preserves binary bytes
   ---
-  duration_ms: 1.423727
+  duration_ms: 1.589165
   type: 'test'
   ...
 # Subtest: discovers SU7 wheel nodes in physical wheel index order
 ok 11 - discovers SU7 wheel nodes in physical wheel index order
   ---
-  duration_ms: 1.782518
+  duration_ms: 2.40929
   type: 'test'
   ...
 # Subtest: falls back atomically when any required SU7 wheel node is missing
 ok 12 - falls back atomically when any required SU7 wheel node is missing
   ---
-  duration_ms: 0.501296
+  duration_ms: 0.489819
   type: 'test'
   ...
 1..12
 # tests 12
 # suites 0
-# pass 11
-# fail 1
+# pass 12
+# fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 71.683308
-exit=1
+# duration_ms 105.726266
+exit=0
