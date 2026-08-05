@@ -7,11 +7,14 @@
     "noEmit": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": false
+    "allowImportingTsExtensions": false,
+    "allowJs": true,
+    "checkJs": false
   },
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
+    "../packages/authoritative-physics/src/**/*.js",
     "worker-configuration.d.ts"
   ]
 }
