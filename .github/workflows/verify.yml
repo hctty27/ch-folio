@@ -30,5 +30,10 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm install --prefix multiplayer-worker --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: multiplayer-worker-lockfile
+          path: multiplayer-worker/package-lock.json
+          if-no-files-found: error
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
