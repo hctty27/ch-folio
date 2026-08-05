@@ -31,15 +31,17 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm install --prefix multiplayer-worker --ignore-scripts
-      - name: Diagnose Worker Rapier package layout
+      - name: Diagnose Worker Rapier package resolution
         run: |
           node --input-type=module <<'EOF'
           import { existsSync, readFileSync, readdirSync } from 'node:fs'
           const root = 'multiplayer-worker/node_modules/@dimforge/rapier3d'
-          console.log(readFileSync(`${root}/package.json`, 'utf8'))
+          const lock = JSON.parse(readFileSync('multiplayer-worker/package-lock.json', 'utf8'))
+          console.log('lock node=', lock.packages['node_modules/@dimforge/rapier3d'])
+          console.log('installed package=', readFileSync(`${root}/package.json`, 'utf8'))
           console.log('files=', readdirSync(root).sort())
-          console.log('rapier.js exists=', existsSync(`${root}/rapier.js`))
           console.log('wasm exists=', existsSync(`${root}/rapier_wasm3d_bg.wasm`))
           EOF
+          npm view @dimforge/rapier3d-deterministic-compat@0.17.3 dist.tarball dist.integrity
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
