@@ -14,8 +14,11 @@ const COLLISION_GROUPS = Object.freeze({
     bumper: (GROUP_BUMPER << 16) | GROUP_OBJECT,
 })
 
-function vector3(values)
+function vector3(values, label)
 {
+    if(!Array.isArray(values) || values.length !== 3 || !values.every(Number.isFinite))
+        throw new TypeError(`${label} must contain exactly three finite numbers`)
+
     return {
         x: values[0],
         y: values[1],
@@ -23,8 +26,15 @@ function vector3(values)
     }
 }
 
-function quaternion(values)
+function quaternion(values, label)
 {
+    if(!Array.isArray(values) || values.length !== 4 || !values.every(Number.isFinite))
+        throw new TypeError(`${label} must contain exactly four finite numbers`)
+
+    const squaredLength = values.reduce((sum, value) => sum + value * value, 0)
+    if(Math.abs(squaredLength - 1) > 1e-5)
+        throw new TypeError(`${label} must be normalized`)
+
     return {
         x: values[0],
         y: values[1],
@@ -51,7 +61,7 @@ function createChassisColliderDesc(RAPIER, collider)
         {
             descriptor = descriptor.setMassProperties(
                 collider.mass,
-                vector3(collider.centerOfMass),
+                vector3(collider.centerOfMass, 'vehicle collider centerOfMass'),
                 { x: 1, y: 1, z: 1 },
                 { x: 0, y: 0, z: 0, w: 1 },
             )
@@ -66,13 +76,13 @@ function createChassisColliderDesc(RAPIER, collider)
 export function createVehicleController(world, body)
 {
     const controller = world.createVehicleController(body)
-    const direction = vector3(VEHICLE_CONFIG.axes.suspensionDirection)
-    const axle = vector3(VEHICLE_CONFIG.axes.axle)
+    const direction = vector3(VEHICLE_CONFIG.axes.suspensionDirection, 'vehicle suspension direction')
+    const axle = vector3(VEHICLE_CONFIG.axes.axle, 'vehicle wheel axle')
 
-    for(const position of VEHICLE_CONFIG.wheels.positions)
+    for(let wheelIndex = 0; wheelIndex < VEHICLE_CONFIG.wheels.positions.length; wheelIndex++)
     {
-        const wheelIndex = controller.addWheel(
-            vector3(position),
+        controller.addWheel(
+            vector3(VEHICLE_CONFIG.wheels.positions[wheelIndex], `vehicle wheel ${wheelIndex} position`),
             direction,
             axle,
             VEHICLE_CONFIG.suspensions.restLength.low,
@@ -99,9 +109,14 @@ export function createVehicle({
     quaternion: initialQuaternion = [ 0, 0, 0, 1 ],
 })
 {
+    if(!Number.isInteger(entityOrder) || entityOrder <= 0)
+        throw new TypeError('entityOrder must be a positive integer')
+
+    vector3(position, 'vehicle position')
+
     const bodyDescriptor = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(...position)
-        .setRotation(quaternion(initialQuaternion))
+        .setRotation(quaternion(initialQuaternion, 'vehicle quaternion'))
         .setCanSleep(VEHICLE_CONFIG.chassis.canSleep)
         .setLinearDamping(DEFAULT_LINEAR_DAMPING)
         .setAngularDamping(DEFAULT_ANGULAR_DAMPING)
@@ -111,11 +126,14 @@ export function createVehicle({
     body.setAdditionalSolverIterations(VEHICLE_CONFIG.additionalSolverIterations)
     body.userData = { entityOrder }
 
+    const colliders = []
     for(const collider of VEHICLE_CONFIG.chassis.colliders)
-        world.createCollider(createChassisColliderDesc(RAPIER, collider), body)
+        colliders.push(world.createCollider(createChassisColliderDesc(RAPIER, collider), body))
 
     return {
         body,
+        bodyHandle: body.handle,
+        colliders,
         controller: createVehicleController(world, body),
     }
 }
