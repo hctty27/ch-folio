@@ -1,5 +1,6 @@
 import { MESSAGE_TYPES, STATE_FLAGS, createStateMessage } from './protocol.js'
 import { RemotePlayers } from './RemotePlayers.js'
+import { MultiplayerServer } from './Server.js'
 
 export const STATE_UPLOAD_HZ = 12
 const STATE_UPLOAD_INTERVAL = 1 / STATE_UPLOAD_HZ
@@ -11,6 +12,7 @@ export class Multiplayer
     constructor(game)
     {
         this.game = game
+        this.server = new MultiplayerServer(game)
         this.remotePlayers = new RemotePlayers(game)
         this.started = false
         this.listenersBound = false
@@ -36,10 +38,15 @@ export class Multiplayer
 
         this.started = true
         this.bindServerEvents()
-        this.game.server.start({
+        const started = this.server.start({
+            url: import.meta.env.VITE_SERVER_URL,
             room: import.meta.env.VITE_MULTIPLAYER_ROOM || 'public',
         })
-        return true
+
+        if(!started)
+            this.started = false
+
+        return started
     }
 
     stop()
@@ -50,7 +57,7 @@ export class Multiplayer
         this.started = false
         this.playerId = null
         this.remotePlayers.clear()
-        this.game.server.stop()
+        this.server.stop()
         return true
     }
 
@@ -67,10 +74,10 @@ export class Multiplayer
             return
 
         this.listenersBound = true
-        this.game.server.events.on('message', this.messageCallback)
-        this.game.server.events.on('connected', this.connectedCallback)
-        this.game.server.events.on('disconnected', this.disconnectedCallback)
-        this.game.server.events.on('error', this.errorCallback)
+        this.server.events.on('message', this.messageCallback)
+        this.server.events.on('connected', this.connectedCallback)
+        this.server.events.on('disconnected', this.disconnectedCallback)
+        this.server.events.on('error', this.errorCallback)
     }
 
     unbindServerEvents()
@@ -79,10 +86,10 @@ export class Multiplayer
             return
 
         this.listenersBound = false
-        this.game.server.events.off('message', this.messageCallback)
-        this.game.server.events.off('connected', this.connectedCallback)
-        this.game.server.events.off('disconnected', this.disconnectedCallback)
-        this.game.server.events.off('error', this.errorCallback)
+        this.server.events.off('message', this.messageCallback)
+        this.server.events.off('connected', this.connectedCallback)
+        this.server.events.off('disconnected', this.disconnectedCallback)
+        this.server.events.off('error', this.errorCallback)
     }
 
     onConnected()
@@ -198,7 +205,7 @@ export class Multiplayer
             })
 
             this.invalidStateWarned = false
-            return this.game.server.send(message)
+            return this.server.send(message)
         }
         catch(error)
         {
@@ -217,7 +224,7 @@ export class Multiplayer
         this.resolveVehicleTemplate()
         this.remotePlayers.update(now)
 
-        if(!this.started || !this.game.server.connected)
+        if(!this.started || !this.server.connected)
             return
 
         const elapsed = this.game.ticker.elapsed
