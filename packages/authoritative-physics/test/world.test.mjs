@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import RAPIER from '@dimforge/rapier3d/rapier.js'
-
 import {
     AuthoritativeWorld,
     quantizeInput,
 } from '../src/index.js'
+import { loadRapierForNode } from './loadRapierForNode.mjs'
 
+const RAPIER = await loadRapierForNode()
 const mapData = JSON.parse(await readFile(
     new URL('../generated/map-v1.json', import.meta.url),
     'utf8',
