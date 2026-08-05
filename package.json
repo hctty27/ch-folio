@@ -12,11 +12,11 @@
     "preview": "vite preview",
     "compress": "node scripts/compress.js static/",
     "test": "npm run test:js && npm run test:su7-convert",
-    "test:js": "node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_multiplayer_room_url.mjs scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs",
+    "test:js": "node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_multiplayer_room_url.mjs scripts/test_multiplayer_room_bootstrap.mjs scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs",
     "test:vehicle": "node --test scripts/test_materialize_vehicle.mjs",
     "test:cockpit": "node --test scripts/test_cockpit_pose.mjs",
     "test:camera": "node --test scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs",
-    "test:multiplayer": "node --test scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_multiplayer_room_url.mjs",
+    "test:multiplayer": "node --test scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_multiplayer_room_url.mjs scripts/test_multiplayer_room_bootstrap.mjs",
     "test:wheels": "node --test scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs",
     "test:su7-convert": "PYTHONPATH=scripts python3 -m unittest scripts/test_convert_su7.py -v"
   },
