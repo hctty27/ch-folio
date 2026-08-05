@@ -56,5 +56,8 @@
     "vite-plugin-restart": "^0.4.1",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0"
+  },
+  "devDependencies": {
+    "@dimforge/rapier3d-node": "npm:@dimforge/rapier3d-deterministic-compat@0.17.3"
   }
 }
