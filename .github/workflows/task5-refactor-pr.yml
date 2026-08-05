@@ -1,32 +1,13 @@
-name: Task 5 Vehicle Refactor PR
+name: Disabled Task 5 Refactor PR
 
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  refactor:
-    if: github.actor != 'github-actions[bot]' && github.head_ref == 'feat/authoritative-physics-foundation'
+  disabled:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feat/authoritative-physics-foundation
-          fetch-depth: 0
-      - name: Apply deterministic vehicle bridge
-        run: python .github/scripts/task5_refactor.py
-      - name: Commit refactor
-        run: |
-          if git diff --quiet; then
-            echo "No refactor changes required"
-            exit 0
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add sources/Game/Physics/PhysicsVehicle.js sources/Game/Player.js packages/authoritative-physics/src/index.js
-          git commit -m "refactor: share deterministic vehicle tuning"
-          git push origin HEAD:feat/authoritative-physics-foundation
+      - run: echo "Task 5 PR refactor completed; workflow disabled."
