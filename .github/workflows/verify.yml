@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test-and-build:
@@ -30,10 +30,15 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm install --prefix multiplayer-worker --ignore-scripts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: multiplayer-worker-lockfile
-          path: multiplayer-worker/package-lock.json
-          if-no-files-found: error
+      - name: Commit generated Worker lockfile
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/worker-lockfile'
+        run: |
+          if git status --porcelain -- multiplayer-worker/package-lock.json | grep -q .; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add multiplayer-worker/package-lock.json
+            git commit -m "fix: add Worker dependency lockfile"
+            git push origin HEAD:feat/worker-lockfile
+          fi
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
