@@ -1,0 +1,10 @@
+{
+  "name": "@ch-folio/authoritative-physics",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./versions": "./src/versions.js"
+  }
+}
