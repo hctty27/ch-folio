@@ -12,10 +12,11 @@
   },
   "dependencies": {
     "@ch-folio/authoritative-physics": "file:../packages/authoritative-physics",
-    "@dimforge/rapier3d": "0.17.3",
+    "@dimforge/rapier3d": "npm:@dimforge/rapier3d-deterministic@0.17.3",
     "@msgpack/msgpack": "^3.1.2"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.18.8",
     "typescript": "^5.9.2",
     "vitest": "^4.1.0",
     "wrangler": "^4.114.0"
