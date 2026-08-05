@@ -14,11 +14,19 @@
       {
         "name": "GAME_ROOM",
         "class_name": "GameRoom"
+      },
+      {
+        "name": "AUTHORITATIVE_ROOM",
+        "class_name": "AuthoritativeGameRoom"
       }
     ]
   },
   "exports": {
     "GameRoom": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "AuthoritativeGameRoom": {
       "type": "durable-object",
       "storage": "sqlite"
     }

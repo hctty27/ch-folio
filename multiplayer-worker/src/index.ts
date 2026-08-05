@@ -17,6 +17,10 @@ import {
 } from './protocol'
 import { runRapierSmoke } from './v2/rapierSmoke'
 
+export { AuthoritativeGameRoom } from './v2/AuthoritativeGameRoom'
+
+const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze([ 1, 2 ])
+
 function isRecord(value: unknown): value is Record<string, unknown>
 {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -43,6 +47,7 @@ export default {
                 ok: true,
                 service: 'ch-folio-multiplayer',
                 protocolVersion: PROTOCOL_VERSION,
+                supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
             })
         }
 
@@ -63,8 +68,26 @@ export default {
         if(request.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
             return json({ ok: false, error: 'websocket_upgrade_required' }, 426)
 
+        const requestedProtocol = url.searchParams.get('protocol')
+        let protocolVersion: 1 | 2
+
+        if(requestedProtocol === null || requestedProtocol === '1')
+            protocolVersion = 1
+        else if(requestedProtocol === '2')
+            protocolVersion = 2
+        else
+        {
+            return json({
+                ok: false,
+                error: 'unsupported_protocol',
+                supportedProtocolVersions: SUPPORTED_PROTOCOL_VERSIONS,
+            }, 400)
+        }
+
         const room = normalizeRoom(url.searchParams.get('room'))
-        const stub = env.GAME_ROOM.getByName(room)
+        const stub = protocolVersion === 2
+            ? env.AUTHORITATIVE_ROOM.getByName(room)
+            : env.GAME_ROOM.getByName(room)
         return stub.fetch(request)
     },
 } satisfies ExportedHandler<Env>
