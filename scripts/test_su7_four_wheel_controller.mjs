@@ -84,7 +84,7 @@ function createGame()
     }
 }
 
-test('hides legacy clones and drives four SU7 wheel roots', () =>
+test('hides legacy clones and preserves the corrected SU7 visual wheelbase', () =>
 {
     const { game, chassis, legacyWheels } = createGame()
     const controller = new SU7FourWheelController(game)
@@ -92,7 +92,7 @@ test('hides legacy clones and drives four SU7 wheel roots', () =>
 
     assert.ok(legacyWheels.every((wheel) => wheel.container.visible === false))
     const roots = SU7_WHEEL_DESCRIPTORS.map((descriptor) => chassis.getObjectByName(descriptor.rootName))
-    assert.deepEqual(roots.map((root) => root.position.x), [0.9, 0.9, -0.9, -0.9])
+    assert.deepEqual(roots.map((root) => root.position.x), [1.05, 1.05, -1.05, -1.05])
     assert.deepEqual(roots.map((root) => root.position.z), [0.75, -0.75, 0.75, -0.75])
     assert.ok(roots.every((root) => root.position.y < -0.5))
 })
