@@ -39,9 +39,13 @@ function entityOrder(value, label = 'entityOrder')
 function finiteFloat32(value, label)
 {
     if(!Number.isFinite(value))
-        throw new TypeError(`${label} must be finite`)
+        throw new TypeError(`${label} must be a finite float32`)
 
-    return Math.fround(value)
+    const rounded = Math.fround(value)
+    if(!Number.isFinite(rounded))
+        throw new TypeError(`${label} must be a finite float32`)
+
+    return rounded
 }
 
 function float32Vector(value, length, label)
