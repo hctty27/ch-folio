@@ -85,6 +85,8 @@ export function decodeFullSyncFrame(value)
     return decoded
 }
 
+export { AuthoritativeWorld } from './AuthoritativeWorld.js'
+
 export {
     dequantizeInput,
     packSuspensions,
