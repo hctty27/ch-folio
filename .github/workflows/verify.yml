@@ -33,4 +33,4 @@ jobs:
       - run: npm install --prefix multiplayer-worker --ignore-scripts
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
-      - run: npm run dry-run --prefix multiplayer-worker
+      - run: cd multiplayer-worker && npx wrangler deploy --dry-run
