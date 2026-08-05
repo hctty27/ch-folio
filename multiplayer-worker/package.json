@@ -11,6 +11,8 @@
     "check": "npm run types && tsc --noEmit"
   },
   "dependencies": {
+    "@ch-folio/authoritative-physics": "file:../packages/authoritative-physics",
+    "@dimforge/rapier3d": "0.17.3",
     "@msgpack/msgpack": "^3.1.2"
   },
   "devDependencies": {
