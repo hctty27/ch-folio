@@ -9,7 +9,10 @@
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": false,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "types": [
+      "@cloudflare/vitest-pool-workers/types"
+    ]
   },
   "include": [
     "src/**/*.ts",
