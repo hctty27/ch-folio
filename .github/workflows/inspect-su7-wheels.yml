@@ -7,13 +7,14 @@ on:
       - '.npmrc'
       - 'package.json'
       - 'package-lock.json'
-      - 'scripts/prepare-su7-four-wheels.mjs'
-      - 'scripts/su7-four-wheel-glb.mjs'
-      - 'scripts/test_su7_*.mjs'
+      - 'scripts/materialize-vehicle.js'
       - 'scripts/convert_su7.py'
+      - 'scripts/test_su7_*.mjs'
       - 'scripts/test_convert_su7.py'
+      - 'scripts/requirements-su7.txt'
       - 'sources/Game/World/SU7*.js'
       - 'sources/index.js'
+      - 'static/vehicle/su7-original-four-wheel/**'
       - '.github/workflows/inspect-su7-wheels.yml'
   workflow_dispatch:
 
@@ -38,6 +39,8 @@ jobs:
         run: python -m pip install -r scripts/requirements-su7.txt
       - name: Install Node dependencies
         run: npm clean-install --progress=false
+      - name: Materialize original four-wheel SU7 asset
+        run: npm run materialize:vehicle
       - name: Run tests
         run: npm test
       - name: Build production bundle
