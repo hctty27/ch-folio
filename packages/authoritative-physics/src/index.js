@@ -114,3 +114,10 @@ export {
     VERSIONS,
     assertCompatibility,
 } from './versions.js'
+
+
+export { VEHICLE_CONFIG } from './vehicleConfig.js'
+export {
+    applyVehicleInput,
+    createQuantizedInputFromPlayer,
+} from './vehicleInput.js'

@@ -1,6 +1,11 @@
 import * as THREE from 'three/webgpu'
 import { Game } from '../Game.js'
 import { Events } from '../Events.js'
+import {
+    VEHICLE_CONFIG,
+    applyVehicleInput,
+    createQuantizedInputFromPlayer,
+} from '@ch-folio/authoritative-physics'
 import { lerp, remap, remapClamp, smallestAngle } from '../utilities/maths.js'
 
 export class PhysicsVehicle
@@ -11,33 +16,27 @@ export class PhysicsVehicle
 
         this.events = new Events()
 
-        this.steeringAmplitude = 0.5
-        this.engineForceAmplitude = 300
-        this.boostMultiplier = 2
-        this.topSpeed = 5
-        this.topSpeedBoost = 40
-        this.brakeAmplitude = 35
-        this.idleBrake = 0.06
-        this.reverseBrake = 0.4
+        this.steeringAmplitude = VEHICLE_CONFIG.steeringAmplitude
+        this.engineForceAmplitude = VEHICLE_CONFIG.engineForceAmplitude
+        this.boostMultiplier = VEHICLE_CONFIG.boostMultiplier
+        this.topSpeed = VEHICLE_CONFIG.topSpeed
+        this.topSpeedBoost = VEHICLE_CONFIG.topSpeedBoost
+        this.brakeAmplitude = VEHICLE_CONFIG.brakeAmplitude
+        this.idleBrake = VEHICLE_CONFIG.idleBrake
+        this.reverseBrake = VEHICLE_CONFIG.reverseBrake
 
-        this.sideward = new THREE.Vector3(0, 0, 1)
-        this.upward = new THREE.Vector3(0, 1, 0)
-        this.forward = new THREE.Vector3(1, 0, 0)
-        this.position = new THREE.Vector3(0, 4, 0)
+        this.sideward = new THREE.Vector3(...VEHICLE_CONFIG.axes.sideward)
+        this.upward = new THREE.Vector3(...VEHICLE_CONFIG.axes.upward)
+        this.forward = new THREE.Vector3(...VEHICLE_CONFIG.axes.forward)
+        this.position = new THREE.Vector3(...VEHICLE_CONFIG.spawnPosition)
         this.quaternion = new THREE.Quaternion()
         this.velocity = new THREE.Vector3()
         this.direction = this.forward.clone()
         this.speed = 0
-        this.suspensionsHeights = {
-            low: 0.88,
-            mid: 1.23,
-            high: 1.63
-        }
-        this.suspensionsStiffness = {
-            low: 20,
-            mid: 30,
-            high: 40
-        }
+        this.suspensionsHeights = { ...VEHICLE_CONFIG.suspensions.restLength }
+        this.suspensionsStiffness = { ...VEHICLE_CONFIG.suspensions.stiffness }
+        this.controlTick = 0
+        this.controlSequence = 0
 
         // Debug
         if(this.game.debug.active)
@@ -90,21 +89,35 @@ export class PhysicsVehicle
         const object = this.game.objects.add(null, {
             type: 'dynamic',
             position: this.position,
-            friction: 0.4,
+            friction: VEHICLE_CONFIG.chassis.friction,
             rotation: new THREE.Quaternion().setFromAxisAngle(new THREE.Euler(0, 1, 0), Math.PI * 0),
-            colliders: [
-                { shape: 'cuboid', mass: 2.5, parameters: [ 1.3, 0.4, 0.85 ], position: { x: 0, y: -0.1, z: 0 }, centerOfMass: { x: 0, y: -0.5, z: 0 } }, // Main
-                { shape: 'cuboid', mass: 0, parameters: [ 0.5, 0.15, 0.65 ], position: { x: 0, y: 0.4, z: 0 } }, // Top
-                { shape: 'cuboid', mass: 0, parameters: [ 1.5, 0.5, 0.9 ], position: { x: 0.1, y: -0.2, z: 0 }, category: 'bumper' }, // Bumper
-            ],
-            canSleep: false,
-            waterGravityMultiplier: 0,
+            colliders: VEHICLE_CONFIG.chassis.colliders.map((collider) => ({
+                ...collider,
+                parameters: [ ...collider.parameters ],
+                position: {
+                    x: collider.position[0],
+                    y: collider.position[1],
+                    z: collider.position[2],
+                },
+                ...(collider.centerOfMass ? {
+                    centerOfMass: {
+                        x: collider.centerOfMass[0],
+                        y: collider.centerOfMass[1],
+                        z: collider.centerOfMass[2],
+                    },
+                } : {}),
+            })),
+            canSleep: VEHICLE_CONFIG.chassis.canSleep,
+            waterGravityMultiplier: VEHICLE_CONFIG.chassis.waterGravityMultiplier,
             onCollision: (force, position) =>
             {
                 this.game.audio.groups.get('hitDefault').playRandomNext(force, position)
             }
         })
         this.chassis.physical = object.physical
+        this.chassis.physical.body.enableCcd(VEHICLE_CONFIG.ccdEnabled)
+        this.chassis.physical.body.setAdditionalSolverIterations(VEHICLE_CONFIG.additionalSolverIterations)
+        this.game.physics.world.integrationParameters.maxCcdSubsteps = VEHICLE_CONFIG.maxCcdSubsteps
         this.chassis.mass = this.chassis.physical.body.mass()
     }
 
@@ -138,29 +151,40 @@ export class PhysicsVehicle
 
         // Settings
         this.wheels.settings = {
-            offset: { x: 0.90, y: 0, z: 0.75 },
-            radius: 0.4,
-            directionCs: { x: 0, y: -1, z: 0 },
-            axleCs: { x: 0, y: 0, z: 1 },
-            frictionSlip: 0.9,
-            maxSuspensionForce: 150,
-            maxSuspensionTravel: 2,
-            sideFrictionStiffness: 3,
-            suspensionCompression: 10,
-            suspensionRelaxation: 2.7,
-            suspensionStiffness: 25,
+            offset: {
+                x: VEHICLE_CONFIG.wheels.offset[0],
+                y: VEHICLE_CONFIG.wheels.offset[1],
+                z: VEHICLE_CONFIG.wheels.offset[2],
+            },
+            radius: VEHICLE_CONFIG.wheels.radius,
+            directionCs: {
+                x: VEHICLE_CONFIG.axes.suspensionDirection[0],
+                y: VEHICLE_CONFIG.axes.suspensionDirection[1],
+                z: VEHICLE_CONFIG.axes.suspensionDirection[2],
+            },
+            axleCs: {
+                x: VEHICLE_CONFIG.axes.axle[0],
+                y: VEHICLE_CONFIG.axes.axle[1],
+                z: VEHICLE_CONFIG.axes.axle[2],
+            },
+            frictionSlip: VEHICLE_CONFIG.wheels.frictionSlip,
+            maxSuspensionForce: VEHICLE_CONFIG.wheels.maxSuspensionForce,
+            maxSuspensionTravel: VEHICLE_CONFIG.wheels.maxSuspensionTravel,
+            sideFrictionStiffness: VEHICLE_CONFIG.wheels.sideFrictionStiffness,
+            suspensionCompression: VEHICLE_CONFIG.wheels.suspensionCompression,
+            suspensionRelaxation: VEHICLE_CONFIG.wheels.suspensionRelaxation,
+            suspensionStiffness: VEHICLE_CONFIG.wheels.suspensionStiffness,
         }
 
         this.wheels.updateSettings = () =>
         {
             this.wheels.perimeter = this.wheels.settings.radius * Math.PI * 2
 
-            const wheelsPositions = [
-                new THREE.Vector3(  this.wheels.settings.offset.x, this.wheels.settings.offset.y,   this.wheels.settings.offset.z),
-                new THREE.Vector3(  this.wheels.settings.offset.x, this.wheels.settings.offset.y, - this.wheels.settings.offset.z),
-                new THREE.Vector3(- this.wheels.settings.offset.x, this.wheels.settings.offset.y,   this.wheels.settings.offset.z),
-                new THREE.Vector3(- this.wheels.settings.offset.x, this.wheels.settings.offset.y, - this.wheels.settings.offset.z),
-            ]
+            const wheelsPositions = VEHICLE_CONFIG.wheels.positions.map(([ x, y, z ]) => new THREE.Vector3(
+                Math.sign(x) * this.wheels.settings.offset.x,
+                y + this.wheels.settings.offset.y,
+                Math.sign(z) * this.wheels.settings.offset.z,
+            ))
             
             let i = 0
             for(const wheel of this.wheels.items)
@@ -456,60 +480,63 @@ export class PhysicsVehicle
 
     updatePrePhysics()
     {
-        // Engine force
-        const topSpeed = lerp(this.topSpeed, this.topSpeedBoost, this.game.player.boosting)
-        const overflowSpeed = Math.max(0, this.speed - topSpeed)
-        let engineForce = (this.game.player.accelerating * (1 + this.game.player.boosting * this.boostMultiplier)) * this.engineForceAmplitude / (1 + overflowSpeed) * this.game.ticker.deltaScaled
+        this.controlTick = (this.controlTick + 1) >>> 0
+        this.controlSequence = (this.controlSequence + 1) >>> 0
 
-        // Brake
-        let brake = this.game.player.braking
-
-        if(!this.game.player.braking && Math.abs(this.game.player.accelerating) < 0.1)
-            brake = this.idleBrake
-    
-        if(
-            this.speed > 0.5 &&
-            (
-                (this.game.player.accelerating > 0 && !this.goingForward) ||
-                (this.game.player.accelerating < 0 && this.goingForward)
-            )
+        const quantizedInput = createQuantizedInputFromPlayer(
+            this.game.player,
+            this.controlTick,
+            this.controlSequence,
         )
+        const frictionSlipByWheel = new Array(VEHICLE_CONFIG.wheelOrder.length)
+
+        for(let wheelIndex = 0; wheelIndex < VEHICLE_CONFIG.wheelOrder.length; wheelIndex++)
         {
-            brake = this.reverseBrake
-            engineForce = 0
-        }
-
-        brake *= this.brakeAmplitude * this.game.ticker.deltaScaled
-
-        // Steer
-        const steer = this.game.player.steering * this.steeringAmplitude
-
-        // Update wheels
-        this.controller.setWheelSteering(0, steer)
-        this.controller.setWheelSteering(1, steer)
-
-        for(let i = 0; i < 4; i++)
-        {
-            this.controller.setWheelBrake(i, brake)
-            this.controller.setWheelEngineForce(i, engineForce)
-            this.controller.setWheelSuspensionRestLength(i, this.suspensionsHeights[this.game.player.suspensions[i]])
-            this.controller.setWheelSuspensionStiffness(i, this.suspensionsStiffness[this.game.player.suspensions[i]])
-
-            // Ice slip
-            const groundObject = this.controller.wheelGroundObject(i)
+            const groundObject = this.controller.wheelGroundObject(wheelIndex)
 
             if(groundObject && this.game.world.waterSurface)
             {
                 const onIce = groundObject.parent() === this.game.world.waterSurface.ice.physical.body
-                const iceFriction = lerp(this.wheels.settings.frictionSlip, 0.04, this.game.world.waterSurface.iceRatio.value)
+                const iceFriction = lerp(
+                    this.wheels.settings.frictionSlip,
+                    0.04,
+                    this.game.world.waterSurface.iceRatio.value,
+                )
 
-                this.controller.setWheelFrictionSlip(i, onIce ? iceFriction : this.wheels.settings.frictionSlip)
+                frictionSlipByWheel[wheelIndex] = onIce
+                    ? iceFriction
+                    : this.wheels.settings.frictionSlip
             }
         }
 
-        // Update controller
-        const delta = this.game.quality.level === 1 ? 1/60 : Math.min(1/60, this.game.ticker.deltaAverage)
-        this.controller.updateVehicle(delta)
+        const tuning = {
+            ...VEHICLE_CONFIG,
+            controlScale: this.game.ticker.deltaScaled,
+            steeringAmplitude: this.steeringAmplitude,
+            engineForceAmplitude: this.engineForceAmplitude,
+            boostMultiplier: this.boostMultiplier,
+            topSpeed: this.topSpeed,
+            topSpeedBoost: this.topSpeedBoost,
+            brakeAmplitude: this.brakeAmplitude,
+            idleBrake: this.idleBrake,
+            reverseBrake: this.reverseBrake,
+            suspensions: {
+                restLength: this.suspensionsHeights,
+                stiffness: this.suspensionsStiffness,
+            },
+        }
+
+        applyVehicleInput(
+            this.controller,
+            this.chassis.physical.body,
+            quantizedInput,
+            {
+                speed: this.speed,
+                goingForward: this.goingForward,
+                frictionSlipByWheel,
+                tuning,
+            },
+        )
     }
 
     updatePostPhysics()
