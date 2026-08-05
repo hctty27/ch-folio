@@ -5,9 +5,8 @@ import { runRapierSmoke } from '../../src/v2/rapierSmoke'
 
 describe('Rapier Worker smoke test', () =>
 {
-    test('initializes, steps a fixed-timestep world, and produces a snapshot', async () =>
+    test('steps a fixed-timestep world and produces a snapshot', () =>
     {
-        await RAPIER.init()
         const result = runRapierSmoke(RAPIER)
 
         expect(Number.isFinite(result.y)).toBe(true)
