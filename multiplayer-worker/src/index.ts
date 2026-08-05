@@ -1,3 +1,5 @@
+import { RAPIER_VERSION } from '@ch-folio/authoritative-physics'
+import RAPIER from '@dimforge/rapier3d'
 import { DurableObject } from 'cloudflare:workers'
 import {
     MAX_MESSAGE_BYTES,
@@ -13,6 +15,7 @@ import {
     normalizeRoom,
     sanitizeClientState,
 } from './protocol'
+import { runRapierSmoke } from './v2/rapierSmoke'
 
 function isRecord(value: unknown): value is Record<string, unknown>
 {
@@ -40,6 +43,17 @@ export default {
                 ok: true,
                 service: 'ch-folio-multiplayer',
                 protocolVersion: PROTOCOL_VERSION,
+            })
+        }
+
+        if(request.method === 'GET' && url.pathname === '/health/rapier-v2')
+        {
+            const result = runRapierSmoke(RAPIER)
+
+            return json({
+                ok: true,
+                rapierVersion: RAPIER_VERSION,
+                ...result,
             })
         }
 
