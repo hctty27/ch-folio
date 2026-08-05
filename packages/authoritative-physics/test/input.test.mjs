@@ -7,7 +7,7 @@ import {
     quantizeInput,
     resolveMissingInput,
     unpackSuspensions,
-} from '../src/input.js'
+} from '../src/index.js'
 
 const LOW_SUSPENSIONS = [ 'low', 'low', 'low', 'low' ]
 
