@@ -22,13 +22,15 @@ function createDocument({ axle = 'z' } = {})
         scenes: [{ nodes: [0] }],
         scene: 0,
         nodes: [
-            { name: 'chassis', children: [1] },
+            { name: 'chassis', children: [1, 7, 8] },
             { name: 'wheelContainer', translation: [1000, 0, 1000], children: [2] },
             { name: 'wheelCylinder', translation: [0.05, 0, 0], children: [3, 4, 5, 6] },
             { name: 'wheelPart_tireA', mesh: 0 },
             { name: 'wheelPart_brake', mesh: 1 },
             { name: 'wheelPart_rim', mesh: 2 },
             { name: 'wheelPart_tireB', mesh: 3 },
+            { name: 'bodyPainted' },
+            { name: 'common_body' },
         ],
         materials: [
             { name: 'su7_tire' },
@@ -85,6 +87,30 @@ test('creates four independent wheel roots in physical wheel order', () =>
         assert.deepEqual(root.translation, slot.position)
         childByName(document, slot.rootName, slot.front ? `${slot.rootName}Steer` : `${slot.rootName}Roll`)
     }
+})
+
+test('wraps body meshes in a visual correction and moves wheel centers with the stretched body', () =>
+{
+    const document = createDocument()
+    const result = prepareSU7FourWheelDocument(document)
+
+    assert.deepEqual(result.bodyVisualScale, [1.18, 0.96, 0.92])
+    assert.deepEqual(result.bodyVisualTranslation, [0, -0.02, 0])
+
+    const correction = childByName(document, 'chassis', 'bodyVisualCorrection')
+    assert.deepEqual(correction.scale, result.bodyVisualScale)
+    assert.deepEqual(correction.translation, result.bodyVisualTranslation)
+
+    const correctedNames = correction.children.map((index) => document.nodes[index].name).sort()
+    assert.deepEqual(correctedNames, ['bodyPainted', 'common_body'])
+
+    const chassis = document.nodes.find((node) => node.name === 'chassis')
+    const directNames = chassis.children.map((index) => document.nodes[index].name)
+    assert.ok(directNames.includes('wheelContainer'))
+    assert.ok(!correctedNames.includes('wheelContainer'))
+
+    assert.deepEqual(document.nodes.find((node) => node.name === 'wheelFrontRight').translation, [1.05, -0.5, 0.75])
+    assert.deepEqual(document.nodes.find((node) => node.name === 'wheelRearLeft').translation, [-1.05, -0.5, -0.75])
 })
 
 test('keeps rolling meshes below roll pivot and brake meshes outside it', () =>
