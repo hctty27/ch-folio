@@ -115,6 +115,13 @@ export {
     assertCompatibility,
 } from './versions.js'
 
+export {
+    MAP_COLLISION_VERSION,
+    SPAWN_APPROACH_HORIZON_SECONDS,
+    SPAWN_COUNT,
+    SPAWN_SAFETY_HALF_EXTENTS,
+    loadAuthoritativeMap,
+} from './map.js'
 
 export { VEHICLE_CONFIG } from './vehicleConfig.js'
 export {
