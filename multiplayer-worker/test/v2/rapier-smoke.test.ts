@@ -1,12 +1,13 @@
-import * as RAPIER from '@dimforge/rapier3d'
+import RAPIER from '@dimforge/rapier3d'
 import { describe, expect, test } from 'vitest'
 
 import { runRapierSmoke } from '../../src/v2/rapierSmoke'
 
 describe('Rapier Worker smoke test', () =>
 {
-    test('steps a fixed-timestep world and produces a non-empty snapshot', () =>
+    test('initializes, steps a fixed-timestep world, and produces a snapshot', async () =>
     {
+        await RAPIER.init()
         const result = runRapierSmoke(RAPIER)
 
         expect(Number.isFinite(result.y)).toBe(true)
