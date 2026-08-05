@@ -1,5 +1,7 @@
 import { discoverSU7WheelNodes } from './SU7WheelNodes.js'
 
+const SU7_VISUAL_WHEELBASE_SCALE = 1.05 / 0.9
+
 export class SU7FourWheelController
 {
     constructor(game)
@@ -90,7 +92,7 @@ export class SU7FourWheelController
             let wheelY = physicalWheel.basePosition.y - suspensionLength
             wheelY = Math.min(wheelY, -0.5)
 
-            visualWheel.container.position.x = physicalWheel.basePosition.x
+            visualWheel.container.position.x = physicalWheel.basePosition.x * SU7_VISUAL_WHEELBASE_SCALE
             visualWheel.container.position.y += (
                 wheelY - visualWheel.container.position.y
             ) * 25 * this.game.ticker.deltaScaled
