@@ -6,11 +6,11 @@ import { SU7_WHEEL_DESCRIPTORS } from '../sources/Game/World/SU7WheelNodes.js'
 
 class FakeNode
 {
-    constructor(name, children = [])
+    constructor(name, children = [], position = { x: 0, y: -0.5, z: 0 })
     {
         this.name = name
         this.children = children
-        this.position = { x: 0, y: -0.5, z: 0 }
+        this.position = { ...position }
         this.rotation = { x: 0, y: 0, z: 0 }
         this.visible = true
     }
@@ -29,16 +29,23 @@ class FakeNode
     }
 }
 
+const sourceWheelPositions = [
+    { x: 0.9000, y: -0.7651, z: 0.5013 },
+    { x: 0.8962, y: -0.7651, z: -0.5140 },
+    { x: -0.8862, y: -0.7651, z: 0.5183 },
+    { x: -0.9000, y: -0.7651, z: -0.5165 },
+]
+
 function createWheelTree()
 {
-    return new FakeNode('chassis', SU7_WHEEL_DESCRIPTORS.map((descriptor) =>
+    return new FakeNode('chassis', SU7_WHEEL_DESCRIPTORS.map((descriptor, index) =>
     {
         const roll = new FakeNode(descriptor.rollName, [new FakeNode(descriptor.paintedName)])
         const brake = new FakeNode(descriptor.brakeName)
         const children = descriptor.steerName
             ? [new FakeNode(descriptor.steerName, [roll, brake])]
             : [roll, brake]
-        return new FakeNode(descriptor.rootName, children)
+        return new FakeNode(descriptor.rootName, children, sourceWheelPositions[index])
     }))
 }
 
@@ -84,7 +91,7 @@ function createGame()
     }
 }
 
-test('hides legacy clones and preserves the corrected SU7 visual wheelbase', () =>
+test('preserves all original source wheel centers instead of overwriting X/Z from physics', () =>
 {
     const { game, chassis, legacyWheels } = createGame()
     const controller = new SU7FourWheelController(game)
@@ -92,12 +99,24 @@ test('hides legacy clones and preserves the corrected SU7 visual wheelbase', () 
 
     assert.ok(legacyWheels.every((wheel) => wheel.container.visible === false))
     const roots = SU7_WHEEL_DESCRIPTORS.map((descriptor) => chassis.getObjectByName(descriptor.rootName))
-    assert.deepEqual(roots.map((root) => root.position.x), [1.05, 1.05, -1.05, -1.05])
-    assert.deepEqual(roots.map((root) => root.position.z), [0.75, -0.75, 0.75, -0.75])
-    assert.ok(roots.every((root) => root.position.y < -0.5))
+    assert.deepEqual(roots.map((root) => root.position.x), sourceWheelPositions.map(({ x }) => x))
+    assert.deepEqual(roots.map((root) => root.position.z), sourceWheelPositions.map(({ z }) => z))
 })
 
-test('uses the same roll direction for all normalized wheel pivots', () =>
+test('applies only suspension delta to original visual wheel height', () =>
+{
+    const { game, chassis } = createGame()
+    const controller = new SU7FourWheelController(game)
+    controller.update()
+
+    game.physicalVehicle.wheels.items[0].suspensionLength = 0.7
+    controller.update()
+
+    assert.ok(chassis.getObjectByName('wheelFrontRight').position.y < sourceWheelPositions[0].y)
+    assert.equal(chassis.getObjectByName('wheelFrontLeft').position.y, sourceWheelPositions[1].y)
+})
+
+test('uses the same roll direction for all source-authored wheel pivots', () =>
 {
     const { game, chassis } = createGame()
     const controller = new SU7FourWheelController(game)
