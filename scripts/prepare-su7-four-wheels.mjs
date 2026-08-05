@@ -1,3 +1,4 @@
+// Stable SU7 wheel preparation path restored after reverting the invalid double-scaling experiment.
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
