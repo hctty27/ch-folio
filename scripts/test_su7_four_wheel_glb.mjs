@@ -106,7 +106,7 @@ test('keeps rolling meshes below roll pivot and brake meshes outside it', () =>
     }
 })
 
-test('corrects non-uniform rolling-plane scale before wheel rotation', () =>
+test('fits the visual wheel to a 0.72 diameter while keeping it circular', () =>
 {
     const document = createDocument()
     for(const accessor of document.accessors)
@@ -118,8 +118,9 @@ test('corrects non-uniform rolling-plane scale before wheel rotation', () =>
     const result = prepareSU7FourWheelDocument(document)
     const aspectNode = document.nodes.find((node) => node.name === 'wheelFrontRightRollAspect')
 
-    assert.ok(Math.abs(result.aspectScale[0] - (0.8 / 0.43)) < 1e-9)
-    assert.equal(result.aspectScale[1], 1)
+    assert.equal(result.targetVisualDiameter, 0.72)
+    assert.ok(Math.abs(result.aspectScale[0] - (0.72 / 0.43)) < 1e-9)
+    assert.ok(Math.abs(result.aspectScale[1] - (0.72 / 0.8)) < 1e-9)
     assert.equal(result.aspectScale[2], 1)
     assert.deepEqual(aspectNode.scale, result.aspectScale)
 })
