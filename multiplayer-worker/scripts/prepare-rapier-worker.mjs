@@ -26,19 +26,11 @@ if(packageJson.name !== expectedPackage || packageJson.version !== expectedVersi
 
 const workerLoader = `import * as imports from './rapier_wasm3d_bg.js'
 import wkmod from './rapier_wasm3d_bg.wasm'
-import * as nodemod from './rapier_wasm3d_bg.wasm'
 
-if(typeof process !== 'undefined' && process.release?.name === 'node')
-{
-    imports.__wbg_set_wasm(nodemod)
-}
-else
-{
-    const instance = new WebAssembly.Instance(wkmod, {
-        './rapier_wasm3d_bg.js': imports,
-    })
-    imports.__wbg_set_wasm(instance.exports)
-}
+const instance = new WebAssembly.Instance(wkmod, {
+    './rapier_wasm3d_bg.js': imports,
+})
+imports.__wbg_set_wasm(instance.exports)
 
 export * from './rapier_wasm3d_bg.js'
 `
