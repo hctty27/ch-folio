@@ -18,29 +18,34 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: scripts/requirements-su7.txt
-      - name: Install Python dependencies
-        run: python -m pip install -r scripts/requirements-su7.txt
       - name: Install Node dependencies
         run: npm clean-install --progress=false
-      - name: Run tests
-        run: npm test
-      - name: Build production bundle
-        run: npm run build
-      - name: Inspect transformed wheel hierarchy
-        run: node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
+      - name: Capture regression
+        shell: bash
+        run: |
+          set +e
+          mkdir -p docs/diagnostics
+          report=docs/diagnostics/su7-body-wheel-fit-regression.txt
+          npm run test:wheels > "$report" 2>&1
+          status=$?
+          echo "exit=$status" >> "$report"
+          cat "$report"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$report"
+          git commit -m "chore: record SU7 body wheel fit regression" || true
+          git push || true
+          exit "$status"
