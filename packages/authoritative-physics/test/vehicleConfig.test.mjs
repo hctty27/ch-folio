@@ -5,7 +5,7 @@ import {
     VEHICLE_CONFIG,
     applyVehicleInput,
     createQuantizedInputFromPlayer,
-} from '../src/vehicleConfig.js'
+} from '../src/index.js'
 
 function createControllerRecorder()
 {
