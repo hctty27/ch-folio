@@ -2,6 +2,7 @@ import './localization/zh-CN.js'
 import './threejs-override.js'
 import { Game } from './Game/Game.js'
 import { Multiplayer } from './Game/Multiplayer/Multiplayer.js'
+import { resolveRoomFromSearch } from './Game/Multiplayer/roomFromUrl.js'
 import { CameraModeController } from './Game/Views/CameraModeController.js'
 import { ChaseView } from './Game/Views/ChaseView.js'
 import { CockpitView } from './Game/Views/CockpitView.js'
@@ -28,9 +29,10 @@ const multiplayer = new Multiplayer(game)
 const multiplayerEnabled = [ '1', 'true' ].includes(
     String(import.meta.env.VITE_MULTIPLAYER_ENABLED).toLowerCase(),
 )
+const multiplayerRoom = resolveRoomFromSearch(window.location.search)
 
-if(multiplayerEnabled && import.meta.env.VITE_SERVER_URL)
-    multiplayer.start()
+if(multiplayerEnabled && import.meta.env.VITE_SERVER_URL && multiplayerRoom)
+    multiplayer.start({ room: multiplayerRoom })
 
 if(import.meta.env.VITE_GAME_PUBLIC)
 {

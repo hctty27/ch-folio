@@ -31,16 +31,16 @@ export class Multiplayer
         this.game.ticker.events.on('tick', this.tickCallback, 10)
     }
 
-    start()
+    start({ room } = {})
     {
-        if(this.started)
+        if(this.started || !room)
             return false
 
         this.started = true
         this.bindServerEvents()
         const started = this.server.start({
             url: import.meta.env.VITE_SERVER_URL,
-            room: import.meta.env.VITE_MULTIPLAYER_ROOM || 'public',
+            room,
         })
 
         if(!started)

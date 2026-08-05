@@ -244,6 +244,6 @@ test('application bootstrap keeps multiplayer optional and exposes it for public
     assert.match(source, /new Multiplayer\(game\)/)
     assert.match(source, /VITE_MULTIPLAYER_ENABLED/)
     assert.match(source, /VITE_SERVER_URL/)
-    assert.match(source, /multiplayer\.start\(\)/)
+    assert.match(source, /multiplayer\.start\(\{\s*room:\s*multiplayerRoom\s*\}\)/)
     assert.match(source, /window\.multiplayer\s*=\s*multiplayer/)
 })
