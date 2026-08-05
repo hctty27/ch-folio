@@ -3,13 +3,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { Events } from './Events.js'
 import { Game } from './Game.js'
 
-const normalizeRoom = (room) =>
-{
-    const value = String(room ?? 'public').trim().toLowerCase()
-    const normalized = value.replace(/[^a-z0-9_-]/g, '-').slice(0, 64)
-    return normalized || 'public'
-}
-
 export class Server
 {
     constructor()
@@ -27,7 +20,6 @@ export class Server
         this.connecting = false
         this.stopped = true
         this.initData = null
-        this.room = 'public'
         this.reconnectAttempts = 0
         this.reconnectTimer = null
         this.socket = null
@@ -35,12 +27,11 @@ export class Server
         document.documentElement.classList.add('is-server-offline')
     }
 
-    start({ room = 'public' } = {})
+    start()
     {
-        if(!import.meta.env.VITE_SERVER_URL)
+        if(!import.meta.env.VITE_LEGACY_SERVER_URL)
             return false
 
-        this.room = normalizeRoom(room)
         this.stopped = false
         this.connect()
         return true
@@ -52,9 +43,7 @@ export class Server
             return false
 
         this.connecting = true
-        const url = new URL(import.meta.env.VITE_SERVER_URL, window.location.href)
-        url.searchParams.set('room', this.room)
-
+        const url = new URL(import.meta.env.VITE_LEGACY_SERVER_URL, window.location.href)
         const socket = new WebSocket(url)
         socket.binaryType = 'arraybuffer'
         this.socket = socket
@@ -91,7 +80,7 @@ export class Server
         {
             const html = /* html */`
                 <div class="top">
-                    <div class="title">多人服务器已连接</div>
+                    <div class="title">服务器已连接</div>
                 </div>
             `
             this.game.notifications?.show(
@@ -124,7 +113,7 @@ export class Server
             {
                 const html = /* html */`
                     <div class="top">
-                        <div class="title">多人服务器连接已断开</div>
+                        <div class="title">服务器连接已断开</div>
                     </div>
                 `
                 this.game.notifications?.show(
@@ -196,7 +185,7 @@ export class Server
         if(!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN)
             return false
 
-        this.socket.send(this.encode(message))
+        this.socket.send(this.encode({ uuid: this.uuid, ...message }))
         return true
     }
 
