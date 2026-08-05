@@ -6,6 +6,7 @@
   "scripts": {
     "prepare:wheels": "node scripts/prepare-su7-four-wheels.mjs",
     "prepare:cockpit": "node scripts/generate-cockpit-config.mjs",
+    "prepare:authoritative-map": "node scripts/export-authoritative-map.mjs",
     "prebuild": "npm install --no-save --package-lock=true --ignore-scripts --prefer-offline --audit=false --fund=false stylus@0.64.0",
     "dev": "npm run prepare:wheels && npm run prepare:cockpit && vite --mode development",
     "build": "npm run prepare:wheels && npm run prepare:cockpit && vite build --mode production",
@@ -15,6 +16,7 @@
     "test:js": "node --test scripts/test_materialize_vehicle.mjs scripts/test_cockpit_pose.mjs scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_multiplayer_room_url.mjs scripts/test_multiplayer_room_bootstrap.mjs scripts/test_su7_wheel_nodes.mjs scripts/test_su7_four_wheel_glb.mjs scripts/test_su7_four_wheel_controller.mjs scripts/test_authoritative_vehicle_bridge.mjs",
     "test:vehicle": "node --test scripts/test_materialize_vehicle.mjs",
     "test:authoritative-vehicle": "node --test packages/authoritative-physics/test/vehicleConfig.test.mjs scripts/test_authoritative_vehicle_bridge.mjs",
+    "test:authoritative-map": "node --test packages/authoritative-physics/test/map.test.mjs",
     "test:cockpit": "node --test scripts/test_cockpit_pose.mjs",
     "test:camera": "node --test scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs",
     "test:multiplayer": "node --test scripts/test_multiplayer.mjs scripts/test_multiplayer_transport_isolation.mjs scripts/test_multiplayer_room_url.mjs scripts/test_multiplayer_room_bootstrap.mjs",
