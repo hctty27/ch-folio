@@ -25,7 +25,7 @@
   "description": "",
   "dependencies": {
     "@ch-folio/authoritative-physics": "file:packages/authoritative-physics",
-    "@dimforge/rapier3d": "npm:@dimforge/rapier3d-deterministic@0.17.3",
+    "@dimforge/rapier3d": "npm:@dimforge/rapier3d-deterministic-compat@0.17.3",
     "@gltf-transform/cli": "^4.1.0",
     "@gltf-transform/core": "^4.2.1",
     "@gltf-transform/extensions": "^4.2.1",
