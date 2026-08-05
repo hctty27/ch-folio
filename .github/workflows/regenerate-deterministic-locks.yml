@@ -1,0 +1,37 @@
+name: Regenerate deterministic lockfiles
+
+on:
+  push:
+    branches:
+      - feat/authoritative-physics-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/authoritative-physics-foundation
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Regenerate root lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Regenerate Worker lockfile
+        run: npm install --prefix multiplayer-worker --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfiles
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json multiplayer-worker/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfiles already current"
+            exit 0
+          fi
+          git commit -m "build: lock deterministic Rapier and workerd tests"
+          git push origin HEAD:feat/authoritative-physics-foundation
