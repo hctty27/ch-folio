@@ -3,6 +3,9 @@
   "name": "ch-folio-multiplayer",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-04",
+  "build": {
+    "command": "node scripts/prepare-rapier-worker.mjs"
+  },
   "observability": {
     "enabled": true
   },
