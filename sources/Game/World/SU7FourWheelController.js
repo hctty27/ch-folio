@@ -1,13 +1,13 @@
 import { discoverSU7WheelNodes } from './SU7WheelNodes.js'
 
-const SU7_VISUAL_WHEELBASE_SCALE = 1.05 / 0.9
-
 export class SU7FourWheelController
 {
     constructor(game)
     {
         this.game = game
         this.items = null
+        this.basePositions = null
+        this.restPhysicalWheelY = null
         this.steering = 0
         this.warned = false
 
@@ -38,6 +38,12 @@ export class SU7FourWheelController
         }
 
         this.items = discovery.items
+        this.basePositions = this.items.map(({ container }) => ({
+            x: container.position.x,
+            y: container.position.y,
+            z: container.position.z,
+        }))
+        this.restPhysicalWheelY = null
         this.visualVehicle = visualVehicle
         this.hideLegacyWheels()
         console.info('[SU7FourWheelController] using four independent SU7 wheel nodes')
@@ -53,6 +59,12 @@ export class SU7FourWheelController
         }
     }
 
+    getPhysicalWheelY(physicalWheel)
+    {
+        const wheelY = physicalWheel.basePosition.y - physicalWheel.suspensionLength
+        return Math.min(wheelY, -0.5)
+    }
+
     update()
     {
         if(!this.items && !this.setUp())
@@ -64,6 +76,9 @@ export class SU7FourWheelController
             return
 
         this.hideLegacyWheels()
+
+        if(!this.restPhysicalWheelY)
+            this.restPhysicalWheelY = physicalWheels.map((wheel) => this.getPhysicalWheelY(wheel))
 
         this.steering += (
             (this.game.player.steering * physicalVehicle.steeringAmplitude) - this.steering
@@ -81,6 +96,7 @@ export class SU7FourWheelController
         {
             const visualWheel = this.items[i]
             const physicalWheel = physicalWheels[i]
+            const basePosition = this.basePositions[i]
 
             if(rollDelta !== 0)
                 visualWheel.roll.rotation.z += rollDelta
@@ -88,15 +104,14 @@ export class SU7FourWheelController
             if(visualWheel.steer)
                 visualWheel.steer.rotation.y = this.steering
 
-            const suspensionLength = physicalWheel.suspensionLength
-            let wheelY = physicalWheel.basePosition.y - suspensionLength
-            wheelY = Math.min(wheelY, -0.5)
+            const suspensionDelta = this.getPhysicalWheelY(physicalWheel) - this.restPhysicalWheelY[i]
+            const targetY = basePosition.y + suspensionDelta
 
-            visualWheel.container.position.x = physicalWheel.basePosition.x * SU7_VISUAL_WHEELBASE_SCALE
+            visualWheel.container.position.x = basePosition.x
             visualWheel.container.position.y += (
-                wheelY - visualWheel.container.position.y
+                targetY - visualWheel.container.position.y
             ) * 25 * this.game.ticker.deltaScaled
-            visualWheel.container.position.z = physicalWheel.basePosition.z
+            visualWheel.container.position.z = basePosition.z
         }
     }
 }
