@@ -83,6 +83,7 @@ export async function loadRapierForNode()
     const sourceRoot = fileURLToPath(new URL('../../../node_modules/@dimforge/rapier3d/', import.meta.url))
     const temporaryRoot = await mkdtemp(join(tmpdir(), 'ch-folio-rapier-'))
     await cp(sourceRoot, temporaryRoot, { recursive: true })
+    await writeFile(join(temporaryRoot, 'package.json'), '{"type":"module"}\n')
     await patchJavaScriptTree(temporaryRoot)
 
     const loader = `import { readFileSync } from 'node:fs'
