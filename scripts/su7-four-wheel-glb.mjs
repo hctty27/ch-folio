@@ -2,12 +2,14 @@ const JSON_CHUNK_TYPE = 0x4E4F534A
 const GLB_MAGIC = 'glTF'
 const GLB_VERSION = 2
 export const SU7_VISUAL_WHEEL_DIAMETER = 0.72
+export const SU7_BODY_VISUAL_SCALE = Object.freeze([1.18, 0.96, 0.92])
+export const SU7_BODY_VISUAL_TRANSLATION = Object.freeze([0, -0.02, 0])
 
 export const SU7_WHEEL_SLOTS = Object.freeze([
-    Object.freeze({ key: 'frontRight', rootName: 'wheelFrontRight', position: [0.9, -0.5, 0.75], front: true, mirror: true }),
-    Object.freeze({ key: 'frontLeft', rootName: 'wheelFrontLeft', position: [0.9, -0.5, -0.75], front: true, mirror: false }),
-    Object.freeze({ key: 'rearRight', rootName: 'wheelRearRight', position: [-0.9, -0.5, 0.75], front: false, mirror: true }),
-    Object.freeze({ key: 'rearLeft', rootName: 'wheelRearLeft', position: [-0.9, -0.5, -0.75], front: false, mirror: false }),
+    Object.freeze({ key: 'frontRight', rootName: 'wheelFrontRight', position: [1.05, -0.5, 0.75], front: true, mirror: true }),
+    Object.freeze({ key: 'frontLeft', rootName: 'wheelFrontLeft', position: [1.05, -0.5, -0.75], front: true, mirror: false }),
+    Object.freeze({ key: 'rearRight', rootName: 'wheelRearRight', position: [-1.05, -0.5, 0.75], front: false, mirror: true }),
+    Object.freeze({ key: 'rearLeft', rootName: 'wheelRearLeft', position: [-1.05, -0.5, -0.75], front: false, mirror: false }),
 ])
 
 function pad4(length)
@@ -339,6 +341,16 @@ export function prepareSU7FourWheelDocument(document)
     const chassis = document.nodes[chassisIndex]
     chassis.children ??= []
 
+    const bodyChildIndices = chassis.children.filter((index) => index !== containerIndex)
+    const bodyCorrectionIndex = addNode(document, {
+        name: 'bodyVisualCorrection',
+        translation: [...SU7_BODY_VISUAL_TRANSLATION],
+        scale: [...SU7_BODY_VISUAL_SCALE],
+        children: bodyChildIndices,
+    })
+    chassis.children = chassis.children.filter((index) => index === containerIndex)
+    chassis.children.push(bodyCorrectionIndex)
+
     for(const slot of SU7_WHEEL_SLOTS)
     {
         const rootIndex = addNode(document, {
@@ -397,13 +409,15 @@ export function prepareSU7FourWheelDocument(document)
     document.asset ??= { version: '2.0' }
     document.asset.extras ??= {}
     document.asset.extras.chFolioSU7FourWheel = {
-        version: 2,
+        version: 3,
         source: 'wheelContainer/wheelCylinder',
         center,
         extents,
         originalAxleAxis: ['x', 'y', 'z'][axleAxis],
         runtimeRollAxis: 'z',
         targetVisualDiameter,
+        bodyVisualScale: [...SU7_BODY_VISUAL_SCALE],
+        bodyVisualTranslation: [...SU7_BODY_VISUAL_TRANSLATION],
         aspectScale,
     }
 
@@ -413,6 +427,8 @@ export function prepareSU7FourWheelDocument(document)
         extents,
         axleAxis: ['x', 'y', 'z'][axleAxis],
         targetVisualDiameter,
+        bodyVisualScale: [...SU7_BODY_VISUAL_SCALE],
+        bodyVisualTranslation: [...SU7_BODY_VISUAL_TRANSLATION],
         aspectScale,
     }
 }
