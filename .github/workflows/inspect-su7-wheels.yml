@@ -31,21 +31,91 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Install Node dependencies
-        run: npm clean-install --progress=false
-      - name: Capture regression
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-su7.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install -r scripts/requirements-su7.txt
+          npm clean-install --progress=false
+      - name: Apply coordinated body and wheel fit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/su7-four-wheel-glb.mjs')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              if old not in text:
+                  raise SystemExit(f'missing expected source block:\n{old}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "const GLB_VERSION = 2\nexport const SU7_VISUAL_WHEEL_DIAMETER = 0.72\n",
+              "const GLB_VERSION = 2\nexport const SU7_VISUAL_WHEEL_DIAMETER = 0.72\nexport const SU7_BODY_VISUAL_SCALE = Object.freeze([1.18, 0.96, 0.92])\nexport const SU7_BODY_VISUAL_TRANSLATION = Object.freeze([0, -0.02, 0])\n",
+          )
+
+          replace_once(
+              "    Object.freeze({ key: 'frontRight', rootName: 'wheelFrontRight', position: [0.9, -0.5, 0.75], front: true, mirror: true }),\n    Object.freeze({ key: 'frontLeft', rootName: 'wheelFrontLeft', position: [0.9, -0.5, -0.75], front: true, mirror: false }),\n    Object.freeze({ key: 'rearRight', rootName: 'wheelRearRight', position: [-0.9, -0.5, 0.75], front: false, mirror: true }),\n    Object.freeze({ key: 'rearLeft', rootName: 'wheelRearLeft', position: [-0.9, -0.5, -0.75], front: false, mirror: false }),\n",
+              "    Object.freeze({ key: 'frontRight', rootName: 'wheelFrontRight', position: [1.05, -0.5, 0.75], front: true, mirror: true }),\n    Object.freeze({ key: 'frontLeft', rootName: 'wheelFrontLeft', position: [1.05, -0.5, -0.75], front: true, mirror: false }),\n    Object.freeze({ key: 'rearRight', rootName: 'wheelRearRight', position: [-1.05, -0.5, 0.75], front: false, mirror: true }),\n    Object.freeze({ key: 'rearLeft', rootName: 'wheelRearLeft', position: [-1.05, -0.5, -0.75], front: false, mirror: false }),\n",
+          )
+
+          replace_once(
+              "    const chassis = document.nodes[chassisIndex]\n    chassis.children ??= []\n\n    for(const slot of SU7_WHEEL_SLOTS)\n",
+              "    const chassis = document.nodes[chassisIndex]\n    chassis.children ??= []\n\n    const bodyChildIndices = chassis.children.filter((index) => index !== containerIndex)\n    const bodyCorrectionIndex = addNode(document, {\n        name: 'bodyVisualCorrection',\n        translation: [...SU7_BODY_VISUAL_TRANSLATION],\n        scale: [...SU7_BODY_VISUAL_SCALE],\n        children: bodyChildIndices,\n    })\n    chassis.children = chassis.children.filter((index) => index === containerIndex)\n    chassis.children.push(bodyCorrectionIndex)\n\n    for(const slot of SU7_WHEEL_SLOTS)\n",
+          )
+
+          replace_once(
+              "        version: 2,\n        source: 'wheelContainer/wheelCylinder',\n        center,\n        extents,\n        originalAxleAxis: ['x', 'y', 'z'][axleAxis],\n        runtimeRollAxis: 'z',\n        targetVisualDiameter,\n        aspectScale,\n",
+              "        version: 3,\n        source: 'wheelContainer/wheelCylinder',\n        center,\n        extents,\n        originalAxleAxis: ['x', 'y', 'z'][axleAxis],\n        runtimeRollAxis: 'z',\n        targetVisualDiameter,\n        bodyVisualScale: [...SU7_BODY_VISUAL_SCALE],\n        bodyVisualTranslation: [...SU7_BODY_VISUAL_TRANSLATION],\n        aspectScale,\n",
+          )
+
+          replace_once(
+              "        axleAxis: ['x', 'y', 'z'][axleAxis],\n        targetVisualDiameter,\n        aspectScale,\n",
+              "        axleAxis: ['x', 'y', 'z'][axleAxis],\n        targetVisualDiameter,\n        bodyVisualScale: [...SU7_BODY_VISUAL_SCALE],\n        bodyVisualTranslation: [...SU7_BODY_VISUAL_TRANSLATION],\n        aspectScale,\n",
+          )
+
+          path.write_text(text)
+          PY
+      - name: Test, build, and inspect
         shell: bash
         run: |
           set +e
           mkdir -p docs/diagnostics
           report=docs/diagnostics/su7-body-wheel-fit-regression.txt
-          npm run test:wheels > "$report" 2>&1
-          status=$?
-          echo "exit=$status" >> "$report"
-          cat "$report"
+          : > "$report"
+          status=0
+
+          run_and_record() {
+            echo >> "$report"
+            echo "### $*" | tee -a "$report"
+            "$@" 2>&1 | tee -a "$report"
+            code=${PIPESTATUS[0]}
+            echo "exit=$code" | tee -a "$report"
+            if [ "$code" -ne 0 ]; then
+              status="$code"
+            fi
+          }
+
+          run_and_record npm run test:wheels
+          run_and_record npm test
+          run_and_record npm run build
+          run_and_record node scripts/inspect_su7_wheel_asset.mjs static/vehicle/default.glb
+          echo "overall_exit=$status" | tee -a "$report"
+
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add "$report"
-          git commit -m "chore: record SU7 body wheel fit regression" || true
-          git push || true
+          if [ "$status" -eq 0 ]; then
+            git add scripts/su7-four-wheel-glb.mjs "$report"
+            git commit -m "fix: coordinate SU7 body and wheel proportions" || true
+            git push || true
+          else
+            git add "$report"
+            git commit -m "chore: record failed SU7 body wheel fit verification" || true
+            git push || true
+          fi
           exit "$status"
