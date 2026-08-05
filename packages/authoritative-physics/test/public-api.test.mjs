@@ -23,10 +23,22 @@ const PROTOCOL_EXPORTS = [
     'encodeStateFrame',
 ]
 
+const MAP_EXPORTS = [
+    'MAP_COLLISION_VERSION',
+    'SPAWN_APPROACH_HORIZON_SECONDS',
+    'SPAWN_COUNT',
+    'SPAWN_SAFETY_HALF_EXTENTS',
+    'loadAuthoritativeMap',
+]
+
 test('shared package public entry exposes every protocol-v2 codec', () =>
 {
     for(const exportName of PROTOCOL_EXPORTS)
-    {
         assert.ok(exportName in physics, `missing public export ${exportName}`)
-    }
+})
+
+test('shared package public entry exposes the authoritative map contract', () =>
+{
+    for(const exportName of MAP_EXPORTS)
+        assert.ok(exportName in physics, `missing public export ${exportName}`)
 })
