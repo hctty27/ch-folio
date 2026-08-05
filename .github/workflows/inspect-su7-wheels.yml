@@ -40,20 +40,63 @@ jobs:
         run: |
           python -m pip install -r scripts/requirements-su7.txt
           npm clean-install --progress=false
-      - name: Capture verification
+      - name: Apply visual wheel diameter fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/su7-four-wheel-glb.mjs')
+          text = path.read_text()
+
+          if 'SU7_VISUAL_WHEEL_DIAMETER' not in text:
+              text = text.replace(
+                  "const GLB_VERSION = 2\n",
+                  "const GLB_VERSION = 2\nexport const SU7_VISUAL_WHEEL_DIAMETER = 0.72\n",
+                  1,
+              )
+
+          old_scale = """    const rollingPlaneAxes = [0, 1, 2].filter((axis) => axis !== axleAxis)\n    const rollingDiameter = Math.max(...rollingPlaneAxes.map((axis) => extents[axis]))\n    const aspectScale = extents.map((extent, axis) =>\n        axis === axleAxis ? 1 : rollingDiameter / extent)\n"""
+          new_scale = """    const targetVisualDiameter = SU7_VISUAL_WHEEL_DIAMETER\n    const aspectScale = extents.map((extent, axis) =>\n        axis === axleAxis ? 1 : targetVisualDiameter / extent)\n"""
+          text = text.replace(old_scale, new_scale, 1)
+
+          old_metadata = """        version: 1,\n        source: 'wheelContainer/wheelCylinder',\n        center,\n        extents,\n        originalAxleAxis: ['x', 'y', 'z'][axleAxis],\n        runtimeRollAxis: 'z',\n        aspectScale,\n"""
+          new_metadata = """        version: 2,\n        source: 'wheelContainer/wheelCylinder',\n        center,\n        extents,\n        originalAxleAxis: ['x', 'y', 'z'][axleAxis],\n        runtimeRollAxis: 'z',\n        targetVisualDiameter,\n        aspectScale,\n"""
+          text = text.replace(old_metadata, new_metadata, 1)
+
+          old_return = """        axleAxis: ['x', 'y', 'z'][axleAxis],\n        aspectScale,\n"""
+          new_return = """        axleAxis: ['x', 'y', 'z'][axleAxis],\n        targetVisualDiameter,\n        aspectScale,\n"""
+          text = text.replace(old_return, new_return, 1)
+
+          path.write_text(text)
+          PY
+      - name: Test and build
         shell: bash
         run: |
           set +e
           mkdir -p docs/diagnostics
           report=docs/diagnostics/su7-wheel-size-regression.txt
           : > "$report"
-          npm run test:wheels > "$report" 2>&1
-          status=$?
-          echo "exit=$status" >> "$report"
-          cat "$report"
+          status=0
+
+          run_and_record() {
+            echo >> "$report"
+            echo "### $*" | tee -a "$report"
+            "$@" 2>&1 | tee -a "$report"
+            code=${PIPESTATUS[0]}
+            echo "exit=$code" | tee -a "$report"
+            if [ "$code" -ne 0 ]; then
+              status="$code"
+            fi
+          }
+
+          run_and_record npm run test:wheels
+          run_and_record npm test
+          run_and_record npm run build
+          echo "overall_exit=$status" | tee -a "$report"
+
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add "$report"
-          git commit -m "chore: record SU7 wheel size regression" || true
+          git add scripts/su7-four-wheel-glb.mjs "$report"
+          git commit -m "fix: reduce SU7 visual wheel diameter" || true
           git push || true
           exit "$status"
