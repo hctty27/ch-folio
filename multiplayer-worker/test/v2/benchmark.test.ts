@@ -32,19 +32,52 @@ function binaryMessage(data: unknown): ArrayBuffer
 
 function nextMessage(socket: WebSocket): Promise<MessageEvent>
 {
+    return collectMessages(socket, 1, () => undefined)
+        .then(([ message ]) => message)
+}
+
+function collectMessages(
+    socket: WebSocket,
+    count: number,
+    action: () => void | Promise<void>,
+): Promise<MessageEvent[]>
+{
     return new Promise((resolve, reject) =>
     {
-        const timeout = setTimeout(() => reject(new Error('timed out waiting for WebSocket message')), 2000)
-        socket.addEventListener('message', (event) =>
+        const messages: MessageEvent[] = []
+        const timeout = setTimeout(() =>
+        {
+            cleanup()
+            reject(new Error(`expected ${count} WebSocket messages, received ${messages.length}`))
+        }, 2000)
+        const cleanup = (): void =>
         {
             clearTimeout(timeout)
-            resolve(event)
-        }, { once: true })
-        socket.addEventListener('error', () =>
+            socket.removeEventListener('message', onMessage)
+            socket.removeEventListener('error', onError)
+        }
+        const onMessage = (event: MessageEvent): void =>
         {
-            clearTimeout(timeout)
+            messages.push(event)
+            if(messages.length === count)
+            {
+                cleanup()
+                resolve(messages)
+            }
+        }
+        const onError = (): void =>
+        {
+            cleanup()
             reject(new Error('WebSocket emitted an error'))
-        }, { once: true })
+        }
+
+        socket.addEventListener('message', onMessage)
+        socket.addEventListener('error', onError, { once: true })
+        Promise.resolve(action()).catch((error: unknown) =>
+        {
+            cleanup()
+            reject(error)
+        })
     })
 }
 
@@ -61,11 +94,13 @@ async function openActiveSocket(room: string): Promise<WebSocket>
     expect(decodeErrorFrame(binaryMessage((await nextMessage(socket)).data)).message)
         .toBe('HELLO_REQUIRED')
 
-    const grantPromise = nextMessage(socket)
-    const syncPromise = nextMessage(socket)
-    socket.send(encodeHello({ clientTick: 0 }))
-    decodeResume(binaryMessage((await grantPromise).data))
-    decodeFullSyncFrame(binaryMessage((await syncPromise).data))
+    const [ grantMessage, syncMessage ] = await collectMessages(
+        socket,
+        2,
+        () => socket.send(encodeHello({ clientTick: 0 })),
+    )
+    decodeResume(binaryMessage(grantMessage.data))
+    decodeFullSyncFrame(binaryMessage(syncMessage.data))
     return socket
 }
 
