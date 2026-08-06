@@ -13,6 +13,6 @@
   "dependencies": {
     "@ch-folio/authoritative-physics": "file:../packages/authoritative-physics",
     "@dimforge/rapier3d": "npm:@dimforge/rapier3d-deterministic@0.17.3",
-    "ws": "8.18.3"
+    "ws": "8.21.1"
   }
 }

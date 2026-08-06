@@ -3,7 +3,10 @@ import http from 'node:http'
 import test from 'node:test'
 import { WebSocket } from 'ws'
 import { normalizeRoomName } from '../src/roomName.js'
-import { createAuthoritativeServer } from '../src/server.js'
+import {
+    WEBSOCKET_LIMITS,
+    createAuthoritativeServer,
+} from '../src/server.js'
 
 function requestJson(port, path)
 {
@@ -54,6 +57,15 @@ test('room names use the existing lowercase bounded contract', () =>
     assert.equal(normalizeRoomName(''), null)
     assert.equal(normalizeRoomName('bad room'), null)
     assert.equal(normalizeRoomName('a'.repeat(65)), null)
+})
+
+test('WebSocket parser limits are substantially tighter than library defaults', () =>
+{
+    assert.deepEqual(WEBSOCKET_LIMITS, {
+        maxPayload: 64 * 1024,
+        maxFragments: 64,
+        maxBufferedChunks: 128,
+    })
 })
 
 test('health endpoint is bounded, non-cacheable, and omits room internals', async (t) =>

@@ -9,6 +9,12 @@ const JSON_HEADERS = Object.freeze({
     'content-type': 'application/json; charset=utf-8',
 })
 
+export const WEBSOCKET_LIMITS = Object.freeze({
+    maxPayload: 64 * 1024,
+    maxFragments: 64,
+    maxBufferedChunks: 128,
+})
+
 function writeJson(response, statusCode, value)
 {
     const body = JSON.stringify(value)
@@ -48,7 +54,7 @@ export function createAuthoritativeServer({
     const webSocketServer = new WebSocketServer({
         noServer: true,
         perMessageDeflate: false,
-        maxPayload: 64 * 1024,
+        ...WEBSOCKET_LIMITS,
     })
 
     let stopping = false
