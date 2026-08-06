@@ -194,6 +194,15 @@ export {
 } from './lifecycleProtocol.js'
 
 export {
+    BENCHMARK_FRAME_TYPES,
+    decodeBenchmarkSummary,
+    decodeBenchmarkSummaryRequest,
+    digestBenchmarkToken,
+    encodeBenchmarkSummary,
+    encodeBenchmarkSummaryRequest,
+} from './benchmarkProtocol.js'
+
+export {
     VEHICLE_RUNTIME_METADATA_BYTES,
     decodeVehicleRuntimeMetadata,
     encodeVehicleRuntimeMetadata,
