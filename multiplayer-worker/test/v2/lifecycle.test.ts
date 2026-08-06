@@ -95,11 +95,9 @@ test('sync-ready gates spawning, input batches reach active slots, and clients c
 {
     const room = `lifecycle-${crypto.randomUUID()}`
     const socket = await openSocket(room)
-    const grantPromise = nextMessage(socket)
-    const syncPromise = nextMessage(socket)
     socket.send(encodeHello({ clientTick: 0 }))
-    const grant = decodeResume(bytes((await grantPromise).data))
-    decodeFullSyncFrame(bytes((await syncPromise).data))
+    const grant = decodeResume(bytes((await nextMessage(socket)).data))
+    decodeFullSyncFrame(bytes((await nextMessage(socket)).data))
 
     const stub = env.AUTHORITATIVE_ROOM.getByName(room)
     await runInDurableObject(stub, async (instance: AuthoritativeGameRoom) =>
