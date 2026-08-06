@@ -46,17 +46,19 @@ for(const { fixture } of scenarioFixtures)
     test(`${fixture.id} matches committed 20Hz checksums and 1Hz snapshot hashes`, async () =>
     {
         const actual = await runAuthoritativeScenario({ RAPIER, fixture })
-        if(
-            fixture.expected.checksums.length === 0
+        const encoded = () => Buffer.from(JSON.stringify(actual)).toString('base64')
+        const missingExpected = fixture.expected.checksums.length === 0
             || fixture.expected.snapshotHashes.length === 0
-            || process.env.PRINT_EXPECTED === '1'
-        )
+
+        if(missingExpected)
         {
-            console.error(
-                `SCENARIO_EXPECTED:${fixture.id}:`
-                + Buffer.from(JSON.stringify(actual)).toString('base64'),
-            )
+            console.error(`SCENARIO_EXPECTED:${fixture.id}:${encoded()}`)
+            assert.fail(`fixture ${fixture.id} has no committed expectations`)
         }
+
+        if(process.env.PRINT_EXPECTED === '1')
+            console.error(`SCENARIO_EXPECTED:${fixture.id}:${encoded()}`)
+
         assert.deepEqual(actual.checksums, fixture.expected.checksums)
         assert.deepEqual(actual.snapshotHashes, fixture.expected.snapshotHashes)
     })
