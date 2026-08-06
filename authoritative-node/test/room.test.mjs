@@ -74,7 +74,7 @@ test('scheduler executes exactly 60 logical ticks per second without elapsed arg
     assert.equal(clock.timers.size, 0)
 })
 
-test('scheduler caps one callback at three catch-up ticks', () =>
+test('scheduler caps every callback at three catch-up ticks', () =>
 {
     const clock = new FakeClock()
     let ticks = 0
@@ -88,9 +88,10 @@ test('scheduler caps one callback at three catch-up ticks', () =>
     scheduler.start()
     clock.advance(100)
     assert.equal(MAX_CATCH_UP_TICKS, 3)
-    assert.equal(ticks, 3)
     assert.ok(callbacks[0].dueTicks >= 6)
     assert.equal(callbacks[0].executedTicks, 3)
+    assert.equal(callbacks.every(({ executedTicks }) => executedTicks <= MAX_CATCH_UP_TICKS), true)
+    assert.equal(ticks, callbacks.reduce((total, callback) => total + callback.executedTicks, 0))
 })
 
 test('room registry isolates rooms, removes only matching empty instances, and stops all rooms', async () =>
