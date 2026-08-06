@@ -6,7 +6,9 @@ const readSource = (path) => readFile(new URL(path, import.meta.url), 'utf8')
 
 test('single-player vehicle uses the shared deterministic configuration and controller helper', async () =>
 {
-    const source = await readSource('../sources/Game/Physics/PhysicsVehicle.js')
+    const wrapperSource = await readSource('../sources/Game/Physics/PhysicsVehicle.js')
+    const legacySource = await readSource('../sources/Game/Physics/PhysicsVehicleLegacy.js')
+    const source = `${wrapperSource}\n${legacySource}`
 
     assert.match(source, /from '@ch-folio\/authoritative-physics'/)
     assert.match(source, /VEHICLE_CONFIG/)
