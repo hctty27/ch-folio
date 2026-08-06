@@ -2,6 +2,7 @@ import http from 'node:http'
 import { RAPIER_VERSION, VERSIONS } from '@ch-folio/authoritative-physics'
 import { WebSocketServer } from 'ws'
 import { normalizeRoomName } from './roomName.js'
+import { RoomRegistry } from './RoomRegistry.js'
 
 const JSON_HEADERS = Object.freeze({
     'cache-control': 'no-store',
@@ -22,7 +23,6 @@ function rejectUpgrade(socket, statusCode, message)
 {
     if(socket.destroyed)
         return
-
     const body = JSON.stringify({ ok: false, error: message })
     socket.end(
         `HTTP/1.1 ${statusCode} ${http.STATUS_CODES[statusCode] ?? 'Error'}\r\n`
@@ -38,10 +38,12 @@ function rejectUpgrade(socket, statusCode, message)
 export function createAuthoritativeServer({
     host = '127.0.0.1',
     port = 8080,
+    roomFactory,
+    roomOptions = {},
+    heartbeatIntervalMs = 30000,
 } = {})
 {
-    const registry = new Map()
-    const sockets = new Set()
+    const registry = new RoomRegistry({ roomFactory, roomOptions })
     const startedAt = process.hrtime.bigint()
     const webSocketServer = new WebSocketServer({
         noServer: true,
@@ -52,6 +54,7 @@ export function createAuthoritativeServer({
     let stopping = false
     let startPromise = null
     let stopPromise = null
+    let heartbeatTimer = null
 
     const server = http.createServer((request, response) =>
     {
@@ -68,11 +71,10 @@ export function createAuthoritativeServer({
                 nodeVersion: process.version,
                 uptimeSeconds,
                 roomCount: registry.size,
-                activeSocketCount: sockets.size,
+                activeSocketCount: registry.activeSocketCount(),
             })
             return
         }
-
         writeJson(response, 404, { ok: false, error: 'not_found' })
     })
 
@@ -100,15 +102,14 @@ export function createAuthoritativeServer({
             rejectUpgrade(socket, 404, 'not_found')
             return
         }
-
         if(url.searchParams.get('protocol') !== String(VERSIONS.protocolVersion))
         {
             rejectUpgrade(socket, 426, 'protocol_2_required')
             return
         }
 
-        const room = normalizeRoomName(url.searchParams.get('room'))
-        if(room === null)
+        const roomName = normalizeRoomName(url.searchParams.get('room'))
+        if(roomName === null)
         {
             rejectUpgrade(socket, 400, 'invalid_room')
             return
@@ -116,26 +117,33 @@ export function createAuthoritativeServer({
 
         webSocketServer.handleUpgrade(request, socket, head, (webSocket) =>
         {
-            let roomSockets = registry.get(room)
-            if(roomSockets === undefined)
-            {
-                roomSockets = new Set()
-                registry.set(room, roomSockets)
-            }
-
-            sockets.add(webSocket)
-            roomSockets.add(webSocket)
-            webSocket.once('close', () =>
-            {
-                sockets.delete(webSocket)
-                roomSockets.delete(webSocket)
-                if(roomSockets.size === 0)
-                    registry.delete(room)
-            })
-            webSocket.on('error', () => {})
-            webSocketServer.emit('connection', webSocket, request, { room })
+            webSocket.isAlive = true
+            webSocket.on('pong', () => { webSocket.isAlive = true })
+            const room = registry.getOrCreate(roomName)
+            room.attachSocket(webSocket)
+            webSocketServer.emit('connection', webSocket, request, { room: roomName })
         })
     })
+
+    function startHeartbeat()
+    {
+        if(!Number.isFinite(heartbeatIntervalMs) || heartbeatIntervalMs <= 0)
+            return
+        heartbeatTimer = setInterval(() =>
+        {
+            for(const socket of webSocketServer.clients)
+            {
+                if(socket.isAlive === false)
+                {
+                    socket.terminate()
+                    continue
+                }
+                socket.isAlive = false
+                socket.ping()
+            }
+        }, heartbeatIntervalMs)
+        heartbeatTimer.unref?.()
+    }
 
     return {
         registry,
@@ -157,6 +165,7 @@ export function createAuthoritativeServer({
                 const onListening = () =>
                 {
                     server.off('error', onError)
+                    startHeartbeat()
                     resolve()
                 }
                 server.once('error', onError)
@@ -176,27 +185,23 @@ export function createAuthoritativeServer({
         {
             if(stopPromise !== null)
                 return stopPromise
-
             stopping = true
             stopPromise = (async () =>
             {
-                for(const socket of sockets)
-                    socket.close(1001, 'server_shutdown')
-
-                await new Promise((resolve) =>
+                if(heartbeatTimer !== null)
                 {
-                    webSocketServer.close(() => resolve())
-                })
-
-                if(!server.listening)
-                    return
-
-                await new Promise((resolve, reject) =>
+                    clearInterval(heartbeatTimer)
+                    heartbeatTimer = null
+                }
+                await registry.stop()
+                await new Promise((resolve) => webSocketServer.close(() => resolve()))
+                if(server.listening)
                 {
-                    server.close((error) => error ? reject(error) : resolve())
-                })
-                registry.clear()
-                sockets.clear()
+                    await new Promise((resolve, reject) =>
+                    {
+                        server.close((error) => error ? reject(error) : resolve())
+                    })
+                }
             })()
             return stopPromise
         },

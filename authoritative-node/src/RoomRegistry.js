@@ -1,10 +1,17 @@
+import { NodeAuthoritativeRoom } from './NodeAuthoritativeRoom.js'
+
 export class RoomRegistry
 {
-    constructor({ roomFactory } = {})
+    constructor({ roomFactory, roomOptions = {} } = {})
     {
-        if(typeof roomFactory !== 'function')
+        if(roomFactory !== undefined && typeof roomFactory !== 'function')
             throw new TypeError('roomFactory must be a function')
-        this.roomFactory = roomFactory
+        this.roomOptions = roomOptions
+        this.roomFactory = roomFactory ?? ((room, onEmpty) => new NodeAuthoritativeRoom({
+            room,
+            onEmpty,
+            ...this.roomOptions,
+        }))
         this.rooms = new Map()
         this.stopping = false
     }
