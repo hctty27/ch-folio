@@ -1,20 +1,32 @@
 import {
+    BENCHMARK_FRAME_TYPES,
     FRAME_TYPES,
     LIFECYCLE_FRAME_TYPES,
+    RAPIER_VERSION,
     ROOM_SLOT_STATES,
+    VERSIONS,
+    decodeBenchmarkSummaryRequest,
     decodeFullSyncRequest,
     decodeInputBatch,
     decodeSyncReady,
+    digestBenchmarkToken,
+    encodeBenchmarkSummary,
 } from '@ch-folio/authoritative-physics'
 import { AuthoritativeGameRoom as BaseAuthoritativeGameRoom } from './AuthoritativeGameRoom'
+import { constantTimeEqual } from './crypto'
+import { Metrics } from './Metrics'
 import { SESSION_STATES } from './SessionRegistry'
 
 const INVALID_FRAME_CODE = 2
 const UNEXPECTED_FRAME_CODE = 3
 const STALE_CONNECTION_CODE = 6
+const BENCHMARK_UNAVAILABLE_CODE = 8
 const INVALID_FRAME_MESSAGE = 'INVALID_FRAME'
 const UNEXPECTED_FRAME_MESSAGE = 'UNEXPECTED_FRAME'
 const STALE_CONNECTION_MESSAGE = 'STALE_CONNECTION'
+const BENCHMARK_UNAVAILABLE_MESSAGE = 'BENCHMARK_UNAVAILABLE'
+
+const MIN_BENCHMARK_TOKEN_LENGTH = 32
 
 type ActiveAttachment = {
     protocolVersion: 2
@@ -28,10 +40,16 @@ type ActiveAttachment = {
 type SimulationSlot = {
     slotState: number
     hasBody: boolean
+    queuedInputs?: Map<number, unknown>
 }
 
 type RuntimeAccess = {
     currentTick: number
+    runtimeGeneration: number
+    rapierInternalTimingAvailable: boolean
+    metrics: Metrics
+    advanceOneTick(): void
+    readQueueDepth(): number
     getAttachment(socket: WebSocket): ActiveAttachment
     rejectSocket(socket: WebSocket, code: number, message: string, closeCode: number): void
     sendFullSync(socket: WebSocket): boolean
@@ -44,14 +62,33 @@ type RuntimeAccess = {
         }): boolean
     }
     simulation: {
+        slots?: Array<SimulationSlot | null>
         getSlot(entityOrder: number): SimulationSlot
         markSyncReady(entityOrder: number): unknown
         queueInput(entityOrder: number, input: unknown): boolean
     } | null
 }
 
+type BenchmarkEnv = Env & {
+    AUTHORITATIVE_BENCHMARK_TOKEN?: unknown
+}
+
 export class AuthoritativeGameRoom extends BaseAuthoritativeGameRoom
 {
+    private readonly benchmarkTokenDigest: Promise<Uint8Array> | null
+    private readonly disconnectedSockets = new WeakSet<WebSocket>()
+
+    constructor(ctx: DurableObjectState, env: Env)
+    {
+        super(ctx, env)
+        const token = (env as BenchmarkEnv).AUTHORITATIVE_BENCHMARK_TOKEN
+        this.benchmarkTokenDigest = typeof token === 'string'
+            && token.length >= MIN_BENCHMARK_TOKEN_LENGTH
+            ? digestBenchmarkToken(token)
+            : null
+        this.installBenchmarkRuntimeHooks()
+    }
+
     override async webSocketMessage(
         socket: WebSocket,
         message: string | ArrayBuffer,
@@ -121,6 +158,12 @@ export class AuthoritativeGameRoom extends BaseAuthoritativeGameRoom
                 return
             }
 
+            if(frameType === BENCHMARK_FRAME_TYPES.SUMMARY_REQUEST)
+            {
+                await this.acceptBenchmarkSummary(runtime, socket, message)
+                return
+            }
+
             runtime.rejectSocket(
                 socket,
                 UNEXPECTED_FRAME_CODE,
@@ -138,6 +181,102 @@ export class AuthoritativeGameRoom extends BaseAuthoritativeGameRoom
                 1002,
             )
         }
+    }
+
+    override webSocketClose(
+        socket: WebSocket,
+        code: number,
+        reason: string,
+        wasClean: boolean,
+    ): void
+    {
+        this.recordDisconnect(socket)
+        super.webSocketClose(socket, code, reason, wasClean)
+    }
+
+    override webSocketError(socket: WebSocket, error: unknown): void
+    {
+        this.recordDisconnect(socket)
+        super.webSocketError(socket, error)
+    }
+
+    private installBenchmarkRuntimeHooks(): void
+    {
+        const runtime = this as unknown as RuntimeAccess
+        const advanceOneTick = runtime.advanceOneTick.bind(this)
+        runtime.advanceOneTick = (): void =>
+        {
+            const previousTick = runtime.currentTick
+            const started = performance.now()
+            advanceOneTick()
+            if(runtime.currentTick > previousTick)
+            {
+                runtime.metrics.recordCompletedTickPhase(
+                    'totalTick',
+                    performance.now() - started,
+                )
+            }
+        }
+
+        runtime.readQueueDepth = (): number =>
+        {
+            const slots = runtime.simulation?.slots
+            if(!Array.isArray(slots))
+                return 0
+            return slots.reduce((maximum, slot) =>
+                Math.max(maximum, slot?.queuedInputs?.size ?? 0), 0)
+        }
+    }
+
+    private recordDisconnect(socket: WebSocket): void
+    {
+        if(this.disconnectedSockets.has(socket))
+            return
+        this.disconnectedSockets.add(socket)
+        ;(this as unknown as RuntimeAccess).metrics.recordDisconnect()
+    }
+
+    private async acceptBenchmarkSummary(
+        runtime: RuntimeAccess,
+        socket: WebSocket,
+        message: ArrayBuffer,
+    ): Promise<void>
+    {
+        const request = decodeBenchmarkSummaryRequest(message)
+        const expected = this.benchmarkTokenDigest === null
+            ? null
+            : await this.benchmarkTokenDigest
+        if(expected === null || !constantTimeEqual(expected, request.tokenDigest))
+        {
+            runtime.rejectSocket(
+                socket,
+                BENCHMARK_UNAVAILABLE_CODE,
+                BENCHMARK_UNAVAILABLE_MESSAGE,
+                1008,
+            )
+            return
+        }
+
+        const runtimeStarts = Math.ceil(runtime.runtimeGeneration / 2)
+        const summary = {
+            schemaVersion: 1,
+            mode: 'durable-object',
+            room: this.ctx.id.name ?? 'public',
+            currentTick: runtime.currentTick,
+            runtimeStarts,
+            roomRestarts: Math.max(0, runtimeStarts - 1),
+            rapierVersion: RAPIER_VERSION,
+            versions: VERSIONS,
+            rapierInternalTimingAvailable: runtime.rapierInternalTimingAvailable,
+            observedPeakMemoryBytes: null,
+            memoryScope: 'cloudflare-v8-isolate-observation-required',
+            metrics: runtime.metrics.readBenchmarkSummary(),
+        }
+
+        const encodeStarted = performance.now()
+        const frame = encodeBenchmarkSummary(summary)
+        runtime.metrics.recordPhase('encode', performance.now() - encodeStarted)
+        socket.send(frame)
     }
 
     private acceptSyncReady(
