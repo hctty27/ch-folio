@@ -108,6 +108,27 @@ export class Metrics
         )
     }
 
+    recordCompletedTickPhase(name: string, milliseconds: number): void
+    {
+        if(typeof name !== 'string' || name.length === 0)
+            throw new TypeError('metric phase name must be a non-empty string')
+        if(this.benchmarkTicks.length === 0)
+            throw new Error('cannot record a completed-tick phase before completing a tick')
+
+        const value = finiteNonNegative(milliseconds, 'milliseconds')
+        const rolling = this.phases.get(name) ?? []
+        rolling.push(value)
+        this.phases.set(name, rolling)
+
+        let samples = this.benchmarkPhases.get(name)
+        if(samples === undefined)
+        {
+            samples = Array.from({ length: this.benchmarkTicks.length }, () => 0)
+            this.benchmarkPhases.set(name, samples)
+        }
+        samples[samples.length - 1] += value
+    }
+
     recordSchedulerCallback(dueTicks: number, executedTicks: number): void
     {
         const due = nonNegativeInteger(dueTicks, 'dueTicks')
