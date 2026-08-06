@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feat/authoritative-physics-foundation
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -30,6 +32,17 @@ jobs:
           const RAPIER = await loadRapierForNode()
           await updateScenarioExpectations({ RAPIER, fixtures: scenarioFixtures })
           NODE
+      - name: Commit generated fixtures
+        run: |
+          if git diff --quiet -- packages/authoritative-physics/test/fixtures; then
+            echo "fixture expectations are already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/authoritative-physics/test/fixtures/*.json
+          git commit -m "test: freeze deterministic authoritative scenario expectations"
+          git push origin HEAD:feat/authoritative-physics-foundation
       - name: Upload generated fixtures
         uses: actions/upload-artifact@v4
         with:
