@@ -1,4 +1,9 @@
-import { SELF } from 'cloudflare:test'
+import {
+    SELF,
+    evictDurableObject,
+    runInDurableObject,
+} from 'cloudflare:test'
+import { env } from 'cloudflare:workers'
 import {
     decodeErrorFrame,
     decodeResume,
@@ -7,6 +12,7 @@ import {
 } from '@ch-folio/authoritative-physics'
 import { describe, expect, test } from 'vitest'
 
+import { AuthoritativeGameRoom } from '../../src/v2/AuthoritativeGameRoom'
 import {
     constantTimeEqual,
     createResumeToken,
@@ -19,6 +25,12 @@ import {
     SESSION_STATES,
     SessionRegistry,
 } from '../../src/v2/SessionRegistry'
+
+type SessionAttachment = {
+    handshake?: string
+    playerId?: number | null
+    generation?: number | null
+}
 
 function nextMessage(socket: WebSocket): Promise<MessageEvent>
 {
@@ -80,26 +92,35 @@ async function openSocket(room: string): Promise<WebSocket>
     return socket
 }
 
-async function waitForClosed(socket: WebSocket): Promise<void>
+async function disconnectSession(
+    room: string,
+    playerId: number,
+    generation: number,
+): Promise<void>
 {
-    for(let attempt = 0; attempt < 20; attempt++)
+    const stub = env.AUTHORITATIVE_ROOM.getByName(room)
+
+    await runInDurableObject(stub, async (
+        instance: AuthoritativeGameRoom,
+        state,
+    ) =>
     {
-        if(socket.readyState === WebSocket.CLOSED)
-            return
+        const socket = state.getWebSockets().find((candidate) =>
+        {
+            const attachment = candidate.deserializeAttachment() as SessionAttachment | null
+            return attachment?.handshake === 'session_active'
+                && attachment.playerId === playerId
+                && attachment.generation === generation
+        })
 
-        await new Promise((resolve) => setTimeout(resolve, 0))
-    }
-
-    throw new Error(`WebSocket did not close; readyState=${socket.readyState}`)
-}
-
-async function closeSocket(socket: WebSocket): Promise<void>
-{
-    if(socket.readyState !== WebSocket.CLOSED)
-        socket.close(1000, 'test complete')
-
-    await waitForClosed(socket)
-    await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(socket).toBeDefined()
+        instance.webSocketClose(
+            socket!,
+            1000,
+            'test disconnect',
+            true,
+        )
+    })
 }
 
 describe('resume-token cryptography', () =>
@@ -266,7 +287,7 @@ describe('authoritative room session handshake', () =>
 
         expect(firstGrant.playerId).toBeGreaterThan(0)
         expect(firstGrant.resumeToken).toHaveLength(32)
-        await closeSocket(firstSocket)
+        await disconnectSession(room, firstGrant.playerId, 1)
 
         const resumedSocket = await openSocket(room)
         const rotatedMessage = nextMessage(resumedSocket)
@@ -279,7 +300,7 @@ describe('authoritative room session handshake', () =>
 
         expect(rotated.playerId).toBe(firstGrant.playerId)
         expect(rotated.resumeToken).not.toEqual(firstGrant.resumeToken)
-        await closeSocket(resumedSocket)
+        await disconnectSession(room, firstGrant.playerId, 2)
 
         const staleSocket = await openSocket(room)
         const rejectedMessage = nextMessage(staleSocket)
@@ -293,7 +314,6 @@ describe('authoritative room session handshake', () =>
             retryable: false,
             message: 'INVALID_RESUME',
         })
-        await waitForClosed(staleSocket)
 
         const currentSocket = await openSocket(room)
         const currentMessage = nextMessage(currentSocket)
@@ -305,6 +325,8 @@ describe('authoritative room session handshake', () =>
         const current = decodeResume(binaryMessage((await currentMessage).data))
         expect(current.playerId).toBe(firstGrant.playerId)
         expect(current.resumeToken).not.toEqual(rotated.resumeToken)
-        await closeSocket(currentSocket)
+
+        const stub = env.AUTHORITATIVE_ROOM.getByName(room)
+        await evictDurableObject(stub, { webSockets: 'close' })
     })
 })
