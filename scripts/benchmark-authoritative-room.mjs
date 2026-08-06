@@ -24,7 +24,6 @@ import {
 const DEFAULT_TICKS = 36_000
 const SAMPLE_INTERVAL_TICKS = 3
 const HASH_INTERVAL_TICKS = 60
-const MAX_TICK_MS = 1000 / 60
 const SAFE_INPUT = Object.freeze({
     clientTick: 0,
     sequence: 0,
@@ -269,22 +268,14 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
             record(samples, 'controllerUpdate', Math.max(0, simulationMs - rapierStepMs))
             recordRapierInternalTimings(primary.world, samples)
 
-            const shadowAdvanced = shadow.world.step()
-            if(shadowAdvanced !== tick)
-                throw new Error(`shadow world advanced to unexpected tick ${shadowAdvanced}`)
-
+            let primaryChecksum = null
             let primarySnapshot = null
-            let shadowSnapshot = null
             if(tick % SAMPLE_INTERVAL_TICKS === 0)
             {
                 const checksumStarted = performance.now()
                 const states = canonicalStates(primary.world, primary.lastInputs)
-                const primaryChecksum = checksum32(states) >>> 0
+                primaryChecksum = checksum32(states) >>> 0
                 record(samples, 'checksum', performance.now() - checksumStarted)
-
-                const shadowChecksum = checksum32(canonicalStates(shadow.world, shadow.lastInputs)) >>> 0
-                if(primaryChecksum !== shadowChecksum)
-                    checksumMismatches++
 
                 const encodeStarted = performance.now()
                 const stateFrame = encodeStateFrame({
@@ -309,13 +300,24 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
                 const snapshotStarted = performance.now()
                 primarySnapshot = Uint8Array.from(primary.world.takeSnapshot())
                 record(samples, 'snapshot', performance.now() - snapshotStarted)
-                shadowSnapshot = Uint8Array.from(shadow.world.takeSnapshot())
             }
 
             record(samples, 'totalTick', performance.now() - tickStarted)
 
-            if(primarySnapshot !== null && shadowSnapshot !== null)
+            const shadowAdvanced = shadow.world.step()
+            if(shadowAdvanced !== tick)
+                throw new Error(`shadow world advanced to unexpected tick ${shadowAdvanced}`)
+
+            if(primaryChecksum !== null)
             {
+                const shadowChecksum = checksum32(canonicalStates(shadow.world, shadow.lastInputs)) >>> 0
+                if(primaryChecksum !== shadowChecksum)
+                    checksumMismatches++
+            }
+
+            if(primarySnapshot !== null)
+            {
+                const shadowSnapshot = Uint8Array.from(shadow.world.takeSnapshot())
                 const hashStarted = performance.now()
                 const [ primaryHash, shadowHash ] = await Promise.all([
                     hashWorldSnapshot(primarySnapshot),
