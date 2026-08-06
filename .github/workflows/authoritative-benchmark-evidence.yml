@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - feat/authoritative-physics-foundation
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
