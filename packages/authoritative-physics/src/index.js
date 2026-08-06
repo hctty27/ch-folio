@@ -186,6 +186,14 @@ export {
 } from './protocol.js'
 
 export {
+    LIFECYCLE_FRAME_TYPES,
+    decodeFullSyncRequest,
+    decodeSyncReady,
+    encodeFullSyncRequest,
+    encodeSyncReady,
+} from './lifecycleProtocol.js'
+
+export {
     VEHICLE_RUNTIME_METADATA_BYTES,
     decodeVehicleRuntimeMetadata,
     encodeVehicleRuntimeMetadata,

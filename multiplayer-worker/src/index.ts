@@ -17,7 +17,7 @@ import {
 } from './protocol'
 import { runRapierSmoke } from './v2/rapierSmoke'
 
-export { AuthoritativeGameRoom } from './v2/AuthoritativeGameRoom'
+export { AuthoritativeGameRoom } from './v2/LifecycleAuthoritativeGameRoom'
 
 const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze([ 1, 2 ])
 
