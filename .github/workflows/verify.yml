@@ -40,3 +40,31 @@ jobs:
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
       - run: cd multiplayer-worker && npx wrangler deploy --dry-run
+
+  generate-expectations:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Generate deterministic fixture expectations
+        run: |
+          env -u CI -u GITHUB_ACTIONS UPDATE_EXPECTED=1 node --input-type=module <<'NODE'
+          import { loadRapierForNode } from './packages/authoritative-physics/test/loadRapierForNode.mjs'
+          import { scenarioFixtures } from './packages/authoritative-physics/test/scenarioCatalog.js'
+          import { updateScenarioExpectations } from './packages/authoritative-physics/test/scenarioUpdater.mjs'
+
+          const RAPIER = await loadRapierForNode()
+          await updateScenarioExpectations({ RAPIER, fixtures: scenarioFixtures })
+          NODE
+      - name: Upload generated fixtures
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-17-scenario-expectations
+          path: packages/authoritative-physics/test/fixtures/*.json
+          if-no-files-found: error
+          retention-days: 1
