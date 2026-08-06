@@ -80,7 +80,7 @@ test('matching authoritative state confirms input without rollback', async () =>
         currentTick: 3,
         rolledBack: false,
     })
-    assert.deepEqual(acknowledgements, [ 3 ])
+    assert.deepEqual(acknowledgements, [ 4 ])
     assert.equal(corrections.length, 0)
     assert.deepEqual(prediction.world.takeSnapshot(), before)
     reconciler.destroy()

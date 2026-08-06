@@ -186,6 +186,12 @@ export {
 } from './protocol.js'
 
 export {
+    VEHICLE_RUNTIME_METADATA_BYTES,
+    decodeVehicleRuntimeMetadata,
+    encodeVehicleRuntimeMetadata,
+} from './runtimeMetadata.js'
+
+export {
     RAPIER_VERSION,
     VERSIONS,
     assertCompatibility,

@@ -1,6 +1,7 @@
 import { checksum32, readCanonicalState } from './canonicalState.js'
 import { quantizeInput, resolveMissingInput } from './input.js'
 import { loadAuthoritativeMap } from './map.js'
+import { encodeVehicleRuntimeMetadata } from './runtimeMetadata.js'
 import { findSafeSpawn } from './spawnPoints.js'
 
 const MAX_SLOTS = 8
@@ -126,6 +127,19 @@ function compareQueuedInputs(left, right)
         return left.entityOrder - right.entityOrder
 
     return left.input.sequence - right.input.sequence
+}
+
+function concatenate(chunks)
+{
+    const byteLength = chunks.reduce((total, chunk) => total + chunk.byteLength, 0)
+    const result = new Uint8Array(byteLength)
+    let offset = 0
+    for(const chunk of chunks)
+    {
+        result.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return result
 }
 
 function assertWorld(world)
@@ -456,19 +470,36 @@ export class RoomSimulation
     createFullSync()
     {
         const states = this.canonicalStates()
+        const metadataChunks = []
+        let metadataOffset = 0
         const entities = this.slots
             .filter(Boolean)
             .sort((left, right) => left.entityOrder - right.entityOrder)
-            .map((slot) => ({
-                entityOrder: slot.entityOrder,
-                slotState: slot.slotState,
-                spawnIndex: slot.spawnIndex,
-                flags: slotFlags(slot),
-                playerId: slot.playerId,
-                lastConfirmedSequence: slot.lastConfirmedSequence,
-                controllerOffset: 0,
-                controllerLength: 0,
-            }))
+            .map((slot) =>
+            {
+                let controllerOffset = metadataOffset
+                let controllerLength = 0
+                if(slot.hasBody && typeof this.world.readVehicleRuntime === 'function')
+                {
+                    const encoded = encodeVehicleRuntimeMetadata(
+                        this.world.readVehicleRuntime(slot.entityOrder),
+                    )
+                    metadataChunks.push(encoded)
+                    controllerLength = encoded.byteLength
+                    metadataOffset += controllerLength
+                }
+
+                return {
+                    entityOrder: slot.entityOrder,
+                    slotState: slot.slotState,
+                    spawnIndex: slot.spawnIndex,
+                    flags: slotFlags(slot),
+                    playerId: slot.playerId,
+                    lastConfirmedSequence: slot.lastConfirmedSequence,
+                    controllerOffset,
+                    controllerLength,
+                }
+            })
         const queuedInputs = this.slots
             .filter(Boolean)
             .flatMap((slot) => [ ...slot.queuedInputs.values() ]
@@ -485,7 +516,7 @@ export class RoomSimulation
             checksum32: checksum32(states),
             snapshot: Uint8Array.from(this.world.takeSnapshot()),
             entities,
-            controllerMetadata: new Uint8Array(),
+            controllerMetadata: concatenate(metadataChunks),
             queuedInputs,
         }
     }

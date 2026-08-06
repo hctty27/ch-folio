@@ -73,16 +73,19 @@ export class Reconciler
     {
         if(!predictionWorld || typeof predictionWorld.step !== 'function')
             throw new TypeError('Reconciler requires a prediction world')
-        if(typeof predictionWorld.checksum !== 'function')
-            throw new TypeError('prediction world must implement checksum')
-        if(typeof predictionWorld.createCheckpoint !== 'function')
-            throw new TypeError('prediction world must implement createCheckpoint')
-        if(typeof predictionWorld.applyStateFrame !== 'function')
-            throw new TypeError('prediction world must implement applyStateFrame')
-        if(typeof predictionWorld.captureFullSync !== 'function')
-            throw new TypeError('prediction world must implement captureFullSync')
-        if(typeof predictionWorld.restoreFullSync !== 'function')
-            throw new TypeError('prediction world must implement restoreFullSync')
+        for(const method of [
+            'checksum',
+            'createCheckpoint',
+            'restoreCheckpoint',
+            'applyStateFrame',
+            'captureFullSync',
+            'restoreFullSync',
+            'readState',
+        ])
+        {
+            if(typeof predictionWorld[method] !== 'function')
+                throw new TypeError(`prediction world must implement ${method}`)
+        }
         if(typeof requestFullSync !== 'function')
             throw new TypeError('requestFullSync must be a function')
         if(typeof acknowledgeInput !== 'function')
@@ -221,8 +224,11 @@ export class Reconciler
         this.checksums.clear()
     }
 
-    replayFrom(startTick, endTick)
+    replayRange(startTick, endTick)
     {
+        if(endTick <= startTick)
+            return 0
+
         const groupedInputs = groupInputsByTick(this.inputs.after(startTick))
         let replayedTicks = 0
 
@@ -290,18 +296,32 @@ export class Reconciler
             )
         }
 
+        const baseTick = Math.max(0, serverTick - 1)
+        const baseCheckpoint = this.checkpoints.findAtOrBefore(baseTick)
+        if(!baseCheckpoint)
+        {
+            return this.hardSyncRequest(
+                'rollback-checkpoint-unavailable',
+                serverTick,
+                currentTick,
+            )
+        }
+
         const backup = this.predictionWorld.captureFullSync()
         const before = this.predictionWorld.readState()
 
         try
         {
+            this.predictionWorld.restoreCheckpoint(baseCheckpoint)
+            this.resetTimeline()
+            this.captureTick()
+            this.replayRange(baseCheckpoint.tick, baseTick)
             this.predictionWorld.applyStateFrame(frame)
             if(this.predictionWorld.checksum() !== (Number(frame.checksum32) >>> 0))
                 throw new Error('authoritative state checksum did not round-trip')
 
-            this.resetTimeline()
             this.captureTick()
-            const replayedTicks = this.replayFrom(serverTick, currentTick)
+            const replayedTicks = this.replayRange(serverTick, currentTick)
             const after = this.predictionWorld.readState()
             this.reconcileVisuals(before, after, {
                 hard: false,
@@ -345,7 +365,7 @@ export class Reconciler
         }
 
         const currentTick = Math.max(previousTick, serverTick)
-        const replayedTicks = this.replayFrom(serverTick, currentTick)
+        const replayedTicks = this.replayRange(serverTick, currentTick)
         const descriptor = sync.entities?.find(
             (entity) => entity.entityOrder === this.localEntityOrder,
         )

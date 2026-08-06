@@ -5,8 +5,11 @@ import {
     ROOM_EVENT_TYPES,
     ROOM_SLOT_STATES,
     VEHICLE_CONFIG,
+    VEHICLE_RUNTIME_METADATA_BYTES,
     checksum32,
+    decodeVehicleRuntimeMetadata,
     dequantizeInput,
+    encodeVehicleRuntimeMetadata,
     loadAuthoritativeMap,
     readCanonicalState,
 } from '@ch-folio/authoritative-physics'
@@ -147,6 +150,36 @@ function copyMetadata(value = {})
         controlFlags: Number(value.controlFlags ?? 0),
         spawnIndex: Number(value.spawnIndex ?? NO_SPAWN_INDEX),
         playerId: Number(value.playerId ?? 0) >>> 0,
+    }
+}
+
+function concatenate(chunks)
+{
+    const length = chunks.reduce((total, chunk) => total + chunk.byteLength, 0)
+    const result = new Uint8Array(length)
+    let offset = 0
+    for(const chunk of chunks)
+    {
+        result.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return result
+}
+
+function runtimeFromDescriptor(descriptor, controllerMetadata)
+{
+    const offset = Number(descriptor.controllerOffset)
+    const length = Number(descriptor.controllerLength)
+    if(length === 0)
+        return null
+    if(length !== VEHICLE_RUNTIME_METADATA_BYTES)
+        throw new TypeError('unsupported vehicle controller metadata length')
+    if(!Number.isInteger(offset) || offset < 0 || offset + length > controllerMetadata.byteLength)
+        throw new TypeError('vehicle controller metadata range is out of bounds')
+
+    return {
+        entityOrder: entityOrder(descriptor.entityOrder),
+        ...decodeVehicleRuntimeMetadata(controllerMetadata.subarray(offset, offset + length)),
     }
 }
 
@@ -299,7 +332,7 @@ export class PredictionWorld
     {
         const vehicle = this.world.getVehicle(state.entityOrder)
         const input = this.lastInputs.get(state.entityOrder) ?? copyInput(vehicle.input)
-        const speed = Math.hypot(...state.linearVelocity)
+        const runtime = this.world.readVehicleRuntime(state.entityOrder)
         const forward = forwardFromQuaternion(state.quaternion)
         const forwardSpeed = (
             state.linearVelocity[0] * forward[0]
@@ -314,9 +347,9 @@ export class PredictionWorld
             throttle: input.throttle,
             brake: input.brake,
             inputFlags: input.flags,
-            speed,
+            speed: runtime.speed,
             forwardSpeed,
-            goingForward: forwardSpeed >= 0,
+            goingForward: runtime.goingForward,
             wheelContacts: readWheelContacts(vehicle),
         }
     }
@@ -372,24 +405,32 @@ export class PredictionWorld
     {
         this.assertActive()
         const states = this.readState()
+        const chunks = []
+        const entities = states.map((state) =>
+        {
+            const metadata = this.stateMetadata.get(state.entityOrder) ?? copyMetadata()
+            const encoded = encodeVehicleRuntimeMetadata(
+                this.world.readVehicleRuntime(state.entityOrder),
+            )
+            const controllerOffset = chunks.length * VEHICLE_RUNTIME_METADATA_BYTES
+            chunks.push(encoded)
+            return {
+                entityOrder: state.entityOrder,
+                slotState: metadata.stateFlags,
+                spawnIndex: metadata.spawnIndex,
+                flags: HAS_BODY_FLAG,
+                playerId: metadata.playerId,
+                lastConfirmedSequence: state.lastConfirmedSequence,
+                controllerOffset,
+                controllerLength: encoded.byteLength,
+            }
+        })
+
         return {
             tick: this.tick,
             snapshot: this.world.takeSnapshot(),
-            entities: states.map((state) =>
-            {
-                const metadata = this.stateMetadata.get(state.entityOrder) ?? copyMetadata()
-                return {
-                    entityOrder: state.entityOrder,
-                    slotState: metadata.stateFlags,
-                    spawnIndex: metadata.spawnIndex,
-                    flags: HAS_BODY_FLAG,
-                    playerId: metadata.playerId,
-                    lastConfirmedSequence: state.lastConfirmedSequence,
-                    controllerOffset: 0,
-                    controllerLength: 0,
-                }
-            }),
-            controllerMetadata: new Uint8Array(),
+            entities,
+            controllerMetadata: concatenate(chunks),
             confirmedSequences: states.map((state) => ({
                 entityOrder: state.entityOrder,
                 sequence: state.lastConfirmedSequence,
@@ -413,6 +454,20 @@ export class PredictionWorld
         }
     }
 
+    restoreCheckpoint(checkpoint)
+    {
+        return this.restoreFullSync({
+            checkpointTick: checkpoint.tick,
+            serverTick: checkpoint.tick,
+            eventCursor: checkpoint.eventCursor,
+            checksum32: 0,
+            snapshot: checkpoint.snapshot,
+            entities: checkpoint.entities,
+            controllerMetadata: checkpoint.controllerMetadata,
+            queuedInputs: [],
+        })
+    }
+
     applyStateFrame(frame)
     {
         this.assertActive()
@@ -420,6 +475,10 @@ export class PredictionWorld
             throw new TypeError('state frame must contain states and events arrays')
 
         const serverTick = uint32(frame.serverTick, 'serverTick')
+        if(this.tick + 1 !== serverTick)
+            throw new Error('state frame must be applied from the immediately previous tick')
+
+        const previousStates = new Map(this.readState().map((state) => [ state.entityOrder, state ]))
         const states = readCanonicalState(frame.states)
         const targetOrders = new Set(states.map((state) => state.entityOrder))
 
@@ -432,6 +491,7 @@ export class PredictionWorld
         for(const state of states)
         {
             const metadata = copyMetadata(state)
+            const previous = previousStates.get(state.entityOrder)
             if(!this.world.vehicles.has(state.entityOrder))
             {
                 this.add(state.entityOrder, {
@@ -451,6 +511,22 @@ export class PredictionWorld
                 flags: state.inputFlags,
             }
             const dequantized = dequantizeInput(input)
+            const previousPosition = previous?.position ?? state.position
+            const delta = state.position.map((component, index) =>
+                component - previousPosition[index])
+            const distance = Math.hypot(...delta)
+            const forward = forwardFromQuaternion(state.quaternion)
+            const forwardRatio = distance > 0
+                ? (
+                    delta[0] * forward[0]
+                    + delta[1] * forward[1]
+                    + delta[2] * forward[2]
+                ) / distance
+                : null
+            const previousRuntime = previous
+                ? this.world.readVehicleRuntime(state.entityOrder)
+                : null
+
             this.world.setVehicleState(state.entityOrder, {
                 position: state.position,
                 quaternion: state.quaternion,
@@ -458,8 +534,13 @@ export class PredictionWorld
                 angularVelocity: state.angularVelocity,
                 steering: dequantized.steering * VEHICLE_CONFIG.steeringAmplitude,
                 confirmedInputSequence: state.lastConfirmedSequence,
+                input,
+                speed: distance / VEHICLE_CONFIG.fixedDt,
+                goingForward: forwardRatio === null
+                    ? previousRuntime?.goingForward !== false
+                    : forwardRatio > 0.5,
+                previousPosition: state.position,
             })
-            this.world.setInput(state.entityOrder, input)
             this.lastInputs.set(state.entityOrder, copyInput(input))
             this.stateMetadata.set(state.entityOrder, metadata)
         }
@@ -480,6 +561,9 @@ export class PredictionWorld
         if(!Array.isArray(sync?.entities) || !Array.isArray(sync?.queuedInputs))
             throw new TypeError('full sync entities and queuedInputs must be arrays')
 
+        const controllerMetadata = sync.controllerMetadata instanceof Uint8Array
+            ? Uint8Array.from(sync.controllerMetadata)
+            : new Uint8Array()
         const replacement = this.createWorld()
         const previous = this.world
         const previousInputs = this.lastInputs
@@ -497,21 +581,33 @@ export class PredictionWorld
         {
             const entities = [ ...sync.entities ]
                 .sort((left, right) => left.entityOrder - right.entityOrder)
+            const bodyEntities = entities.filter(
+                (descriptor) => (Number(descriptor.flags) & HAS_BODY_FLAG) !== 0,
+            )
+            const runtimes = bodyEntities.map(
+                (descriptor) => runtimeFromDescriptor(descriptor, controllerMetadata),
+            )
+            const hasCompleteMetadata = runtimes.every(Boolean)
 
-            for(const descriptor of entities)
+            if(hasCompleteMetadata)
             {
-                const order = entityOrder(descriptor.entityOrder)
-                if((Number(descriptor.flags) & HAS_BODY_FLAG) === 0)
-                    continue
-
-                this.add(order, {
-                    ...normalizeSpawn(this.mapData, descriptor.spawnIndex),
-                    ...copyMetadata(descriptor),
+                this.world.restoreSnapshot(Uint8Array.from(sync.snapshot), {
+                    tick: uint32(sync.checkpointTick, 'checkpointTick'),
+                    vehicles: runtimes,
                 })
             }
-
-            this.world.restoreSnapshot(Uint8Array.from(sync.snapshot))
-            this.world.tick = uint32(sync.checkpointTick, 'checkpointTick')
+            else
+            {
+                for(const descriptor of bodyEntities)
+                {
+                    this.add(descriptor.entityOrder, {
+                        ...normalizeSpawn(this.mapData, descriptor.spawnIndex),
+                        ...copyMetadata(descriptor),
+                    })
+                }
+                this.world.restoreSnapshot(Uint8Array.from(sync.snapshot))
+                this.world.tick = uint32(sync.checkpointTick, 'checkpointTick')
+            }
 
             for(const descriptor of entities)
             {
@@ -519,11 +615,15 @@ export class PredictionWorld
                 if(!this.world.vehicles.has(order))
                     continue
 
+                const runtime = hasCompleteMetadata
+                    ? runtimes.find((value) => value.entityOrder === order)
+                    : this.world.readVehicleRuntime(order)
+                const sequence = Number(descriptor.lastConfirmedSequence ?? runtime.confirmedInputSequence) >>> 0
+                const input = { ...runtime.input, sequence }
+                this.world.setInput(order, input)
                 const vehicle = this.world.getVehicle(order)
-                const sequence = Number(descriptor.lastConfirmedSequence ?? 0) >>> 0
                 vehicle.confirmedInputSequence = sequence
-                vehicle.input.sequence = sequence
-                this.lastInputs.set(order, copyInput(vehicle.input))
+                this.lastInputs.set(order, copyInput(input))
                 this.stateMetadata.set(order, copyMetadata(descriptor))
             }
 

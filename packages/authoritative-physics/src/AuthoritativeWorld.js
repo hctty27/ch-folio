@@ -127,6 +127,29 @@ function cloneRuntime(vehicle)
     }
 }
 
+function cloneRuntimeDescriptor(value)
+{
+    assertEntityOrder(value?.entityOrder)
+    if(!Number.isFinite(value?.bodyHandle))
+        throw new TypeError('runtime bodyHandle must be finite')
+    if(!Number.isFinite(value?.steering))
+        throw new TypeError('runtime steering must be finite')
+    if(!Number.isFinite(value?.speed))
+        throw new TypeError('runtime speed must be finite')
+    assertFiniteVector(value?.previousPosition, 3, 'runtime previousPosition')
+
+    return {
+        entityOrder: value.entityOrder,
+        bodyHandle: value.bodyHandle,
+        input: cloneInput(value.input),
+        steering: value.steering,
+        confirmedInputSequence: Number(value.confirmedInputSequence) >>> 0,
+        speed: value.speed,
+        goingForward: value.goingForward !== false,
+        previousPosition: [ ...value.previousPosition ],
+    }
+}
+
 export class AuthoritativeWorld
 {
     constructor({ RAPIER, mapData })
@@ -307,6 +330,12 @@ export class AuthoritativeWorld
         }
     }
 
+    readVehicleRuntime(entityOrder)
+    {
+        this.assertActive()
+        return cloneRuntime(this.getVehicle(entityOrder))
+    }
+
     setVehicleState(entityOrder, state)
     {
         this.assertActive()
@@ -330,20 +359,38 @@ export class AuthoritativeWorld
 
         vehicle.steering = Number.isFinite(state.steering) ? state.steering : 0
         vehicle.confirmedInputSequence = Number(state.confirmedInputSequence) >>> 0
-        vehicle.input.sequence = vehicle.confirmedInputSequence
-        vehicle.previousPosition = [ ...position ]
-        vehicle.speed = Math.sqrt(
-            linearVelocity[0] * linearVelocity[0] +
-            linearVelocity[1] * linearVelocity[1] +
-            linearVelocity[2] * linearVelocity[2]
-        )
+        vehicle.input = state.input ? cloneInput(state.input) : {
+            ...vehicle.input,
+            sequence: vehicle.confirmedInputSequence,
+        }
 
-        const forward = forwardFromQuaternion(quaternion(initialQuaternion))
-        vehicle.goingForward = (
-            linearVelocity[0] * forward.x +
-            linearVelocity[1] * forward.y +
-            linearVelocity[2] * forward.z
-        ) >= 0
+        if(state.previousPosition !== undefined)
+        {
+            assertFiniteVector(state.previousPosition, 3, 'previousPosition')
+            vehicle.previousPosition = [ ...state.previousPosition ]
+        }
+        else
+            vehicle.previousPosition = [ ...position ]
+
+        vehicle.speed = Number.isFinite(state.speed)
+            ? state.speed
+            : Math.sqrt(
+                linearVelocity[0] * linearVelocity[0] +
+                linearVelocity[1] * linearVelocity[1] +
+                linearVelocity[2] * linearVelocity[2]
+            )
+
+        if(typeof state.goingForward === 'boolean')
+            vehicle.goingForward = state.goingForward
+        else
+        {
+            const forward = forwardFromQuaternion(quaternion(initialQuaternion))
+            vehicle.goingForward = (
+                linearVelocity[0] * forward.x +
+                linearVelocity[1] * forward.y +
+                linearVelocity[2] * forward.z
+            ) >= 0
+        }
 
         vehicle.controller.setWheelSteering(0, vehicle.steering)
         vehicle.controller.setWheelSteering(1, vehicle.steering)
@@ -362,7 +409,7 @@ export class AuthoritativeWorld
         return snapshot
     }
 
-    restoreSnapshot(snapshot)
+    restoreSnapshot(snapshot, explicitMetadata = null)
     {
         this.assertActive()
         if(!(snapshot instanceof Uint8Array))
@@ -371,9 +418,19 @@ export class AuthoritativeWorld
         const currentMetadata = [ ...this.vehicles.values() ]
             .sort((left, right) => left.entityOrder - right.entityOrder)
             .map(cloneRuntime)
-        const metadata = this.snapshotMetadata.get(snapshot) ?? {
+        const capturedMetadata = this.snapshotMetadata.get(snapshot)
+        const sourceMetadata = explicitMetadata ?? capturedMetadata ?? {
             tick: this.tick,
             vehicles: currentMetadata,
+        }
+        if(!Array.isArray(sourceMetadata?.vehicles))
+            throw new TypeError('snapshot metadata must contain vehicle runtimes')
+
+        const metadata = {
+            tick: Number(sourceMetadata.tick) >>> 0,
+            vehicles: sourceMetadata.vehicles
+                .map(cloneRuntimeDescriptor)
+                .sort((left, right) => left.entityOrder - right.entityOrder),
         }
 
         const restoredWorld = this.RAPIER.World.restoreSnapshot(snapshot)
@@ -389,10 +446,13 @@ export class AuthoritativeWorld
                 throw new Error(`snapshot is missing entityOrder ${descriptor.entityOrder}`)
             }
 
+            const controller = createVehicleController(restoredWorld, body)
+            controller.setWheelSteering(0, descriptor.steering)
+            controller.setWheelSteering(1, descriptor.steering)
             restoredVehicles.set(descriptor.entityOrder, {
                 entityOrder: descriptor.entityOrder,
                 body,
-                controller: createVehicleController(restoredWorld, body),
+                controller,
                 input: cloneInput(descriptor.input),
                 steering: descriptor.steering,
                 confirmedInputSequence: descriptor.confirmedInputSequence,
@@ -405,7 +465,7 @@ export class AuthoritativeWorld
         const previousWorld = this.world
         this.world = restoredWorld
         this.vehicles = restoredVehicles
-        this.tick = metadata.tick >>> 0
+        this.tick = metadata.tick
         previousWorld.free()
     }
 

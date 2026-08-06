@@ -110,8 +110,8 @@ export class VisualCorrection
             const afterQuaternion = normalizeQuaternion(after.quaternion)
 
             if(
-                distance(beforePosition, afterPosition) >= this.snapDistance
-                || quaternionAngle(beforeQuaternion, afterQuaternion) >= this.snapAngle
+                distance(beforePosition, afterPosition) > this.snapDistance
+                || quaternionAngle(beforeQuaternion, afterQuaternion) > this.snapAngle
             )
                 continue
 
