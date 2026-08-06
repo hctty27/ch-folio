@@ -3,6 +3,9 @@
   "name": "ch-folio-multiplayer",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-04",
+  "build": {
+    "command": "node scripts/prepare-rapier-worker.mjs"
+  },
   "observability": {
     "enabled": true
   },
@@ -11,11 +14,19 @@
       {
         "name": "GAME_ROOM",
         "class_name": "GameRoom"
+      },
+      {
+        "name": "AUTHORITATIVE_ROOM",
+        "class_name": "AuthoritativeGameRoom"
       }
     ]
   },
   "exports": {
     "GameRoom": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "AuthoritativeGameRoom": {
       "type": "durable-object",
       "storage": "sqlite"
     }

@@ -1,0 +1,216 @@
+{
+  "id": "ccd-tunneling",
+  "ticks": 120,
+  "entities": [
+    {
+      "entityOrder": 1,
+      "position": [
+        -20,
+        0.5,
+        0
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "linearVelocity": [
+        140,
+        0,
+        0
+      ],
+      "angularVelocity": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 1,
+      "entityOrder": 1,
+      "sequence": 1,
+      "throttle": 0,
+      "brake": 0,
+      "steering": 0,
+      "suspensions": 0,
+      "flags": 0
+    }
+  ],
+  "expected": {
+    "checksums": [
+      {
+        "tick": 3,
+        "checksum32": 1890487346
+      },
+      {
+        "tick": 6,
+        "checksum32": 3984416626
+      },
+      {
+        "tick": 9,
+        "checksum32": 2722004448
+      },
+      {
+        "tick": 12,
+        "checksum32": 1723694675
+      },
+      {
+        "tick": 15,
+        "checksum32": 536746679
+      },
+      {
+        "tick": 18,
+        "checksum32": 3898931308
+      },
+      {
+        "tick": 21,
+        "checksum32": 1628114870
+      },
+      {
+        "tick": 24,
+        "checksum32": 3497271193
+      },
+      {
+        "tick": 27,
+        "checksum32": 3936409393
+      },
+      {
+        "tick": 30,
+        "checksum32": 3313071919
+      },
+      {
+        "tick": 33,
+        "checksum32": 3215581351
+      },
+      {
+        "tick": 36,
+        "checksum32": 3421547548
+      },
+      {
+        "tick": 39,
+        "checksum32": 1977625363
+      },
+      {
+        "tick": 42,
+        "checksum32": 2369810270
+      },
+      {
+        "tick": 45,
+        "checksum32": 3807544518
+      },
+      {
+        "tick": 48,
+        "checksum32": 453441384
+      },
+      {
+        "tick": 51,
+        "checksum32": 3504543873
+      },
+      {
+        "tick": 54,
+        "checksum32": 451776794
+      },
+      {
+        "tick": 57,
+        "checksum32": 856640907
+      },
+      {
+        "tick": 60,
+        "checksum32": 773657197
+      },
+      {
+        "tick": 63,
+        "checksum32": 2642102445
+      },
+      {
+        "tick": 66,
+        "checksum32": 610355949
+      },
+      {
+        "tick": 69,
+        "checksum32": 833027745
+      },
+      {
+        "tick": 72,
+        "checksum32": 3535896480
+      },
+      {
+        "tick": 75,
+        "checksum32": 1274479073
+      },
+      {
+        "tick": 78,
+        "checksum32": 1724729786
+      },
+      {
+        "tick": 81,
+        "checksum32": 198827914
+      },
+      {
+        "tick": 84,
+        "checksum32": 4113580668
+      },
+      {
+        "tick": 87,
+        "checksum32": 1413457573
+      },
+      {
+        "tick": 90,
+        "checksum32": 3210246469
+      },
+      {
+        "tick": 93,
+        "checksum32": 1538456388
+      },
+      {
+        "tick": 96,
+        "checksum32": 79906254
+      },
+      {
+        "tick": 99,
+        "checksum32": 3859333957
+      },
+      {
+        "tick": 102,
+        "checksum32": 2733745810
+      },
+      {
+        "tick": 105,
+        "checksum32": 944367356
+      },
+      {
+        "tick": 108,
+        "checksum32": 4204741171
+      },
+      {
+        "tick": 111,
+        "checksum32": 687532899
+      },
+      {
+        "tick": 114,
+        "checksum32": 702684478
+      },
+      {
+        "tick": 117,
+        "checksum32": 1184408261
+      },
+      {
+        "tick": 120,
+        "checksum32": 2855440891
+      }
+    ],
+    "snapshotHashes": [
+      {
+        "tick": 60,
+        "sha256": "01f155a2104d212e0057c67451b03220c6d6b4737f7e1a6a5e754bb2532b4930"
+      },
+      {
+        "tick": 120,
+        "sha256": "5415180a91d03cb339f0a449884831c4f3c4d042547999ec05a5ed11659d7def"
+      }
+    ]
+  }
+}
