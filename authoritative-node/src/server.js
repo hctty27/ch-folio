@@ -61,9 +61,9 @@ export function createAuthoritativeServer({
             const uptimeSeconds = Number(process.hrtime.bigint() - startedAt) / 1e9
             writeJson(response, 200, {
                 ok: !stopping,
-                protocolVersion: VERSIONS.protocol,
-                vehiclePhysicsVersion: VERSIONS.vehiclePhysics,
-                mapCollisionVersion: VERSIONS.mapCollision,
+                protocolVersion: VERSIONS.protocolVersion,
+                vehiclePhysicsVersion: VERSIONS.vehiclePhysicsVersion,
+                mapCollisionVersion: VERSIONS.mapCollisionVersion,
                 rapierVersion: RAPIER_VERSION,
                 nodeVersion: process.version,
                 uptimeSeconds,
@@ -101,7 +101,7 @@ export function createAuthoritativeServer({
             return
         }
 
-        if(url.searchParams.get('protocol') !== String(VERSIONS.protocol))
+        if(url.searchParams.get('protocol') !== String(VERSIONS.protocolVersion))
         {
             rejectUpgrade(socket, 426, 'protocol_2_required')
             return
