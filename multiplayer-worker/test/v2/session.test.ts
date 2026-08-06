@@ -80,17 +80,25 @@ async function openSocket(room: string): Promise<WebSocket>
     return socket
 }
 
+async function waitForClosed(socket: WebSocket): Promise<void>
+{
+    for(let attempt = 0; attempt < 20; attempt++)
+    {
+        if(socket.readyState === WebSocket.CLOSED)
+            return
+
+        await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+
+    throw new Error(`WebSocket did not close; readyState=${socket.readyState}`)
+}
+
 async function closeSocket(socket: WebSocket): Promise<void>
 {
-    if(socket.readyState === WebSocket.CLOSED)
-        return
+    if(socket.readyState !== WebSocket.CLOSED)
+        socket.close(1000, 'test complete')
 
-    const closed = new Promise<void>((resolve) =>
-    {
-        socket.addEventListener('close', () => resolve(), { once: true })
-    })
-    socket.close(1000, 'test complete')
-    await closed
+    await waitForClosed(socket)
     await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
@@ -285,7 +293,7 @@ describe('authoritative room session handshake', () =>
             retryable: false,
             message: 'INVALID_RESUME',
         })
-        await closeSocket(staleSocket)
+        await waitForClosed(staleSocket)
 
         const currentSocket = await openSocket(room)
         const currentMessage = nextMessage(currentSocket)
