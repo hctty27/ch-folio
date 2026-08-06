@@ -180,7 +180,7 @@ test('v2 server sends HELLO when no resume credential is available', () =>
 test('v2 server emits only validated binary frames and rejects text or malformed headers', () =>
 {
     resetSockets()
-    const { server } = createServer({ maxFrameBytes: 64 })
+    const { server, timers } = createServer({ maxFrameBytes: 64 })
     const frames = []
     const errors = []
     server.events.on('frame', (frame) => frames.push(frame))
@@ -204,6 +204,7 @@ test('v2 server emits only validated binary frames and rejects text or malformed
     assert.equal(errors.length, 1)
     assert.equal(socket.closeCalls.at(-1).code, 1003)
 
+    assert.equal(timers.runNext(), true)
     const reconnect = FakeSocket.instances[1]
     reconnect.open()
     const malformed = new Uint8Array(8)
@@ -214,6 +215,13 @@ test('v2 server emits only validated binary frames and rejects text or malformed
     reconnect.receive(malformed.buffer)
     assert.equal(errors.length, 2)
     assert.equal(reconnect.closeCalls.at(-1).code, 1002)
+
+    assert.equal(timers.runNext(), true)
+    const oversized = FakeSocket.instances[2]
+    oversized.open()
+    oversized.receive(new Uint8Array(65).buffer)
+    assert.equal(errors.length, 3)
+    assert.equal(oversized.closeCalls.at(-1).code, 1009)
 })
 
 test('v2 server guards reconnects, caps exponential backoff, and clears timers on stop', () =>
@@ -292,7 +300,7 @@ test('input publisher reads and quantizes once, records the same object, and flu
     assert.equal(publisher.unacknowledgedInputs.length, 3)
     assert.strictEqual(recorded[0], publisher.unacknowledgedInputs[0])
     assert.strictEqual(recorded[1], publisher.unacknowledgedInputs[1])
-    assert.strictEqual(recored[2], publisher.unacknowledgedInputs[2])
+    assert.strictEqual(recorded[2], publisher.unacknowledgedInputs[2])
     assert.equal(sent.length, 1)
     assert.deepEqual(decodeInputBatch(sent[0]), recorded)
 })
@@ -304,7 +312,7 @@ test('input publisher emits safe neutral input before active spawn', () =>
     Object.defineProperty(game, 'player', {
         get()
         {
-            reads$«
+            reads++
             return {
                 accelerating: 1,
                 braking: 0,
@@ -362,7 +370,7 @@ test('input publisher batches at most six and retains exactly sixty latest unack
         },
     })
 
-    for(let tick = 0; tick < 65; tick+)
+    for(let tick = 0; tick < 65; tick++)
         publisher.sample(tick)
 
     assert.equal(attempts[0].length, 3)
