@@ -32,6 +32,18 @@ type SessionAttachment = {
     generation?: number | null
 }
 
+type RuntimeProbe = {
+    scheduler: {
+        running: boolean
+    }
+    sessions: {
+        size: number
+    }
+    simulation: unknown | null
+    authoritativeWorld: unknown | null
+    advanceOneTick(): void
+}
+
 function nextMessage(socket: WebSocket): Promise<MessageEvent>
 {
     return new Promise((resolve, reject) =>
@@ -92,6 +104,21 @@ async function openSocket(room: string): Promise<WebSocket>
     return socket
 }
 
+function findSessionSocket(
+    sockets: WebSocket[],
+    playerId: number,
+    generation: number,
+): WebSocket | undefined
+{
+    return sockets.find((candidate) =>
+    {
+        const attachment = candidate.deserializeAttachment() as SessionAttachment | null
+        return attachment?.handshake === 'session_active'
+            && attachment.playerId === playerId
+            && attachment.generation === generation
+    })
+}
+
 async function disconnectSession(
     room: string,
     playerId: number,
@@ -105,13 +132,11 @@ async function disconnectSession(
         state,
     ) =>
     {
-        const socket = state.getWebSockets().find((candidate) =>
-        {
-            const attachment = candidate.deserializeAttachment() as SessionAttachment | null
-            return attachment?.handshake === 'session_active'
-                && attachment.playerId === playerId
-                && attachment.generation === generation
-        })
+        const socket = findSessionSocket(
+            state.getWebSockets(),
+            playerId,
+            generation,
+        )
 
         expect(socket).toBeDefined()
         instance.webSocketClose(
@@ -121,6 +146,46 @@ async function disconnectSession(
             true,
         )
     })
+}
+
+async function disconnectExpireAndEvict(
+    room: string,
+    playerId: number,
+    generation: number,
+): Promise<void>
+{
+    const stub = env.AUTHORITATIVE_ROOM.getByName(room)
+
+    await runInDurableObject(stub, async (
+        instance: AuthoritativeGameRoom,
+        state,
+    ) =>
+    {
+        const socket = findSessionSocket(
+            state.getWebSockets(),
+            playerId,
+            generation,
+        )
+        expect(socket).toBeDefined()
+
+        instance.webSocketClose(
+            socket!,
+            1000,
+            'test complete',
+            true,
+        )
+
+        const probe = instance as unknown as RuntimeProbe
+        for(let tick = 0; tick < SESSION_GRACE_TICKS; tick++)
+            probe.advanceOneTick()
+
+        expect(probe.sessions.size).toBe(0)
+        expect(probe.scheduler.running).toBe(false)
+        expect(probe.simulation).toBeNull()
+        expect(probe.authoritativeWorld).toBeNull()
+    })
+
+    await evictDurableObject(stub, { webSockets: 'close' })
 }
 
 describe('resume-token cryptography', () =>
@@ -326,7 +391,6 @@ describe('authoritative room session handshake', () =>
         expect(current.playerId).toBe(firstGrant.playerId)
         expect(current.resumeToken).not.toEqual(rotated.resumeToken)
 
-        const stub = env.AUTHORITATIVE_ROOM.getByName(room)
-        await evictDurableObject(stub, { webSockets: 'close' })
+        await disconnectExpireAndEvict(room, firstGrant.playerId, 3)
     })
 })
