@@ -1,0 +1,13 @@
+{
+  "id":"occupied-spawn",
+  "ticks":120,
+  "entities":[
+    {"entityOrder":1,"position":[15.643456,0.5,36.3773],"quaternion":[0,0,0,1],"linearVelocity":[0,0,0],"angularVelocity":[0,0,0]},
+    {"entityOrder":2,"position":[15.643456,0.5,36.3773],"quaternion":[0,1,0,0],"linearVelocity":[0,0,0],"angularVelocity":[0,0,0]}
+  ],
+  "inputs":[
+    {"tick":1,"entityOrder":1,"sequence":1,"throttle":0,"brake":0,"steering":0,"suspensions":0,"flags":0},
+    {"tick":1,"entityOrder":2,"sequence":1,"throttle":0,"brake":0,"steering":0,"suspensions":0,"flags":0}
+  ],
+  "expected":{"checksums":[],"snapshotHashes":[]}
+}

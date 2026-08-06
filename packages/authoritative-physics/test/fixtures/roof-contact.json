@@ -1,0 +1,13 @@
+{
+  "id":"roof-contact",
+  "ticks":120,
+  "entities":[
+    {"entityOrder":1,"position":[0,0.5,26],"quaternion":[0,0,0,1],"linearVelocity":[0,0,0],"angularVelocity":[0,0,0]},
+    {"entityOrder":2,"position":[0,2.4,26],"quaternion":[0,0,0,1],"linearVelocity":[0,-3,0],"angularVelocity":[0,0,0]}
+  ],
+  "inputs":[
+    {"tick":1,"entityOrder":1,"sequence":1,"throttle":0,"brake":0,"steering":0,"suspensions":0,"flags":0},
+    {"tick":1,"entityOrder":2,"sequence":1,"throttle":0,"brake":0,"steering":0,"suspensions":0,"flags":0}
+  ],
+  "expected":{"checksums":[],"snapshotHashes":[]}
+}

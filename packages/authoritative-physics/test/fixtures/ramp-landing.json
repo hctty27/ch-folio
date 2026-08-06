@@ -1,0 +1,7 @@
+{
+  "id":"ramp-landing",
+  "ticks":120,
+  "entities":[{"entityOrder":1,"position":[27,8,22],"quaternion":[0,0,0,1],"linearVelocity":[4,-12,0],"angularVelocity":[0,0,0.2]}],
+  "inputs":[{"tick":1,"entityOrder":1,"sequence":1,"throttle":0,"brake":0,"steering":0,"suspensions":0,"flags":0}],
+  "expected":{"checksums":[],"snapshotHashes":[]}
+}

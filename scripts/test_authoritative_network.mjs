@@ -3,13 +3,20 @@ import test from 'node:test'
 
 import { loadRapierForNode } from '../packages/authoritative-physics/test/loadRapierForNode.mjs'
 import { scenarioFixtures } from '../packages/authoritative-physics/test/scenarioCatalog.js'
-import { runPredictionScenario } from '../packages/authoritative-physics/test/scenarioHarness.mjs'
 import {
     NETWORK_CASES,
+    runPredictionScenario,
     runSeededNetworkSimulation,
 } from './authoritativeNetworkHarness.mjs'
 
 const RAPIER = await loadRapierForNode()
+
+function fixtureById(id)
+{
+    const found = scenarioFixtures.find(({ fixture }) => fixture.id === id)
+    assert.ok(found, `missing fixture ${id}`)
+    return found.fixture
+}
 
 test('browser prediction adapter matches every committed deterministic fixture', async () =>
 {
@@ -25,7 +32,7 @@ test('seeded network simulation covers latency, jitter, reordering, drops, and b
 {
     const result = await runSeededNetworkSimulation({
         RAPIER,
-        fixture: scenarioFixtures.find(({ fixture }) => fixture.id === 'high-head-on').fixture,
+        fixture: fixtureById('high-head-on'),
         seed: 'task-17-network',
         caseName: NETWORK_CASES.DELAY_JITTER_REORDER_DROP_BATCH,
     })
@@ -43,7 +50,7 @@ test('authority older than one second requests hard sync instead of partial roll
 {
     const result = await runSeededNetworkSimulation({
         RAPIER,
-        fixture: scenarioFixtures.find(({ fixture }) => fixture.id === 'rear-end').fixture,
+        fixture: fixtureById('rear-end'),
         seed: 'task-17-old-authority',
         caseName: NETWORK_CASES.AUTHORITY_OLDER_THAN_ONE_SECOND,
     })
@@ -57,7 +64,7 @@ test('disconnect during collision resumes before 180 ticks and expires at the bo
 {
     const beforeExpiry = await runSeededNetworkSimulation({
         RAPIER,
-        fixture: scenarioFixtures.find(({ fixture }) => fixture.id === 'side-impact').fixture,
+        fixture: fixtureById('side-impact'),
         seed: 'task-17-resume-before',
         caseName: NETWORK_CASES.RESUME_BEFORE_GRACE_EXPIRY,
     })
@@ -67,7 +74,7 @@ test('disconnect during collision resumes before 180 ticks and expires at the bo
 
     const afterExpiry = await runSeededNetworkSimulation({
         RAPIER,
-        fixture: scenarioFixtures.find(({ fixture }) => fixture.id === 'side-impact').fixture,
+        fixture: fixtureById('side-impact'),
         seed: 'task-17-resume-after',
         caseName: NETWORK_CASES.RESUME_AFTER_GRACE_EXPIRY,
     })

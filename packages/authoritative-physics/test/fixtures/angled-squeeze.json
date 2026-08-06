@@ -1,0 +1,15 @@
+{
+  "id":"angled-squeeze",
+  "ticks":120,
+  "entities":[
+    {"entityOrder":1,"position":[-8,0.5,10],"quaternion":[0,-0.19509,0,0.980785],"linearVelocity":[12,0,5],"angularVelocity":[0,0,0]},
+    {"entityOrder":2,"position":[8,0.5,10],"quaternion":[0,0.19509,0,0.980785],"linearVelocity":[-12,0,5],"angularVelocity":[0,0,0]},
+    {"entityOrder":3,"position":[0,0.5,18],"quaternion":[0,0.707106781,0,0.707106781],"linearVelocity":[0,0,-10],"angularVelocity":[0,0,0]}
+  ],
+  "inputs":[
+    {"tick":1,"entityOrder":1,"sequence":1,"throttle":80,"brake":0,"steering":2500,"suspensions":0,"flags":0},
+    {"tick":1,"entityOrder":2,"sequence":1,"throttle":80,"brake":0,"steering":-2500,"suspensions":0,"flags":0},
+    {"tick":1,"entityOrder":3,"sequence":1,"throttle":80,"brake":0,"steering":0,"suspensions":0,"flags":0}
+  ],
+  "expected":{"checksums":[],"snapshotHashes":[]}
+}
