@@ -293,8 +293,9 @@ export class AuthoritativeGameRoom extends DurableObject<Env>
         world.step = () =>
         {
             const started = performance.now()
-            originalStep()
+            const result = originalStep()
             this.lastRapierStepMs = performance.now() - started
+            return result
         }
 
         this.authoritativeWorld = world
