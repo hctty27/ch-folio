@@ -91,6 +91,19 @@ export class InputPublisher
         return input
     }
 
+    acknowledge(nextUnacknowledgedSequence)
+    {
+        const cursor = uint32(nextUnacknowledgedSequence)
+        const before = this.unacknowledgedInputs.length
+        this.unacknowledgedInputs = this.unacknowledgedInputs.filter(
+            (input) => input.sequence >= cursor,
+        )
+        this.pendingInputs = this.pendingInputs.filter(
+            (input) => input.sequence >= cursor,
+        )
+        return before - this.unacknowledgedInputs.length
+    }
+
     flush()
     {
         if(this.pendingInputs.length === 0)

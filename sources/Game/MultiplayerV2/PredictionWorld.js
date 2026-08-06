@@ -1,9 +1,14 @@
 import mapSource from '../../../packages/authoritative-physics/generated/map-v1.json' with { type: 'json' }
 import {
     AuthoritativeWorld,
+    NO_SPAWN_INDEX,
     ROOM_EVENT_TYPES,
+    ROOM_SLOT_STATES,
     VEHICLE_CONFIG,
+    checksum32,
+    dequantizeInput,
     loadAuthoritativeMap,
+    readCanonicalState,
 } from '@ch-folio/authoritative-physics'
 
 const HAS_BODY_FLAG = 1
@@ -74,6 +79,16 @@ function compareEvents(left, right)
     return left.type - right.type
 }
 
+function sameEvent(left, right)
+{
+    return left.tick === right.tick
+        && left.type === right.type
+        && left.entityOrder === right.entityOrder
+        && left.spawnIndex === right.spawnIndex
+        && left.flags === right.flags
+        && left.value === right.value
+}
+
 function vector(value)
 {
     return value === null || value === undefined
@@ -116,6 +131,25 @@ function normalizeSpawn(mapData, spawnIndex)
     }
 }
 
+function copyWheelRotations(value)
+{
+    if(!Array.isArray(value) || value.length !== 4)
+        return [ 0, 0, 0, 0 ]
+    return value.map((rotation) => Number(rotation))
+}
+
+function copyMetadata(value = {})
+{
+    return {
+        stateFlags: Number(value.stateFlags ?? value.slotState ?? ROOM_SLOT_STATES.ACTIVE),
+        collisionFlags: Number(value.collisionFlags ?? 0),
+        wheelRotations: copyWheelRotations(value.wheelRotations),
+        controlFlags: Number(value.controlFlags ?? 0),
+        spawnIndex: Number(value.spawnIndex ?? NO_SPAWN_INDEX),
+        playerId: Number(value.playerId ?? 0) >>> 0,
+    }
+}
+
 export class PredictionWorld
 {
     constructor({ RAPIER, mapData = mapSource } = {})
@@ -127,6 +161,7 @@ export class PredictionWorld
         this.mapData = loadAuthoritativeMap(mapData)
         this.eventsByTick = new Map()
         this.lastInputs = new Map()
+        this.stateMetadata = new Map()
         this.queuedInputs = []
         this.eventCursor = 0
         this.destroyed = false
@@ -159,6 +194,7 @@ export class PredictionWorld
         const added = this.world.addVehicle(order, state)
         const vehicle = this.world.getVehicle(order)
         this.lastInputs.set(order, copyInput(vehicle.input))
+        this.stateMetadata.set(order, copyMetadata(state))
         return this.decorateState(added)
     }
 
@@ -167,6 +203,7 @@ export class PredictionWorld
         this.assertActive()
         const order = entityOrder(entityOrderValue)
         this.lastInputs.delete(order)
+        this.stateMetadata.delete(order)
         this.queuedInputs = this.queuedInputs.filter((record) => record.entityOrder !== order)
         return this.world.removeVehicle(order)
     }
@@ -180,7 +217,8 @@ export class PredictionWorld
         {
             const event = copyEvent(source)
             const scheduled = this.eventsByTick.get(event.tick) ?? []
-            scheduled.push(event)
+            if(!scheduled.some((existing) => sameEvent(existing, event)))
+                scheduled.push(event)
             scheduled.sort(compareEvents)
             this.eventsByTick.set(event.tick, scheduled)
         }
@@ -191,7 +229,12 @@ export class PredictionWorld
         if(event.type === ROOM_EVENT_TYPES.SPAWN)
         {
             if(!this.world.vehicles.has(event.entityOrder))
-                this.add(event.entityOrder, normalizeSpawn(this.mapData, event.spawnIndex))
+            {
+                this.add(event.entityOrder, {
+                    ...normalizeSpawn(this.mapData, event.spawnIndex),
+                    spawnIndex: event.spawnIndex,
+                })
+            }
             return
         }
 
@@ -208,6 +251,8 @@ export class PredictionWorld
         const canonical = records.map(copyQueuedInput).sort(compareInputs)
         for(const record of canonical)
         {
+            if(!this.world.vehicles.has(record.entityOrder))
+                continue
             this.world.setInput(record.entityOrder, record.input)
             this.lastInputs.set(record.entityOrder, record.input)
         }
@@ -287,6 +332,146 @@ export class PredictionWorld
             .map((order) => this.decorateState(this.world.readVehicleState(order)))
     }
 
+    canonicalStates()
+    {
+        this.assertActive()
+        const states = [ ...this.world.vehicles.keys() ]
+            .sort((left, right) => left - right)
+            .map((order) =>
+            {
+                const state = this.world.readVehicleState(order)
+                const input = this.lastInputs.get(order) ?? copyInput(this.world.getVehicle(order).input)
+                const metadata = this.stateMetadata.get(order) ?? copyMetadata()
+                return {
+                    entityOrder: order,
+                    stateFlags: metadata.stateFlags,
+                    collisionFlags: metadata.collisionFlags,
+                    suspensions: input.suspensions,
+                    lastConfirmedSequence: state.confirmedInputSequence >>> 0,
+                    position: state.position,
+                    quaternion: state.quaternion,
+                    linearVelocity: state.linearVelocity,
+                    angularVelocity: state.angularVelocity,
+                    steering: input.steering,
+                    wheelRotations: metadata.wheelRotations,
+                    controlFlags: metadata.controlFlags,
+                    throttle: input.throttle,
+                    brake: input.brake,
+                    inputFlags: input.flags,
+                }
+            })
+        return readCanonicalState(states)
+    }
+
+    checksum()
+    {
+        return checksum32(this.canonicalStates())
+    }
+
+    createCheckpoint()
+    {
+        this.assertActive()
+        const states = this.readState()
+        return {
+            tick: this.tick,
+            snapshot: this.world.takeSnapshot(),
+            entities: states.map((state) =>
+            {
+                const metadata = this.stateMetadata.get(state.entityOrder) ?? copyMetadata()
+                return {
+                    entityOrder: state.entityOrder,
+                    slotState: metadata.stateFlags,
+                    spawnIndex: metadata.spawnIndex,
+                    flags: HAS_BODY_FLAG,
+                    playerId: metadata.playerId,
+                    lastConfirmedSequence: state.lastConfirmedSequence,
+                    controllerOffset: 0,
+                    controllerLength: 0,
+                }
+            }),
+            controllerMetadata: new Uint8Array(),
+            confirmedSequences: states.map((state) => ({
+                entityOrder: state.entityOrder,
+                sequence: state.lastConfirmedSequence,
+            })),
+            eventCursor: this.eventCursor,
+        }
+    }
+
+    captureFullSync()
+    {
+        const checkpoint = this.createCheckpoint()
+        return {
+            checkpointTick: checkpoint.tick,
+            serverTick: checkpoint.tick,
+            eventCursor: checkpoint.eventCursor,
+            checksum32: this.checksum(),
+            snapshot: checkpoint.snapshot,
+            entities: checkpoint.entities,
+            controllerMetadata: checkpoint.controllerMetadata,
+            queuedInputs: this.queuedInputs.map(copyQueuedInput).sort(compareInputs),
+        }
+    }
+
+    applyStateFrame(frame)
+    {
+        this.assertActive()
+        if(!Array.isArray(frame?.states) || !Array.isArray(frame?.events))
+            throw new TypeError('state frame must contain states and events arrays')
+
+        const serverTick = uint32(frame.serverTick, 'serverTick')
+        const states = readCanonicalState(frame.states)
+        const targetOrders = new Set(states.map((state) => state.entityOrder))
+
+        for(const order of [ ...this.world.vehicles.keys() ])
+        {
+            if(!targetOrders.has(order))
+                this.remove(order)
+        }
+
+        for(const state of states)
+        {
+            const metadata = copyMetadata(state)
+            if(!this.world.vehicles.has(state.entityOrder))
+            {
+                this.add(state.entityOrder, {
+                    position: state.position,
+                    quaternion: state.quaternion,
+                    ...metadata,
+                })
+            }
+
+            const input = {
+                clientTick: serverTick,
+                sequence: state.lastConfirmedSequence,
+                throttle: state.throttle,
+                brake: state.brake,
+                steering: state.steering,
+                suspensions: state.suspensions,
+                flags: state.inputFlags,
+            }
+            const dequantized = dequantizeInput(input)
+            this.world.setVehicleState(state.entityOrder, {
+                position: state.position,
+                quaternion: state.quaternion,
+                linearVelocity: state.linearVelocity,
+                angularVelocity: state.angularVelocity,
+                steering: dequantized.steering * VEHICLE_CONFIG.steeringAmplitude,
+                confirmedInputSequence: state.lastConfirmedSequence,
+            })
+            this.world.setInput(state.entityOrder, input)
+            this.lastInputs.set(state.entityOrder, copyInput(input))
+            this.stateMetadata.set(state.entityOrder, metadata)
+        }
+
+        this.world.tick = serverTick
+        this.eventCursor = Number(frame.eventCursor ?? this.eventCursor) >>> 0
+        this.eventsByTick.clear()
+        this.queueEvents(frame.events)
+        this.queuedInputs = []
+        return this.checksum()
+    }
+
     restoreFullSync(sync)
     {
         this.assertActive()
@@ -297,9 +482,16 @@ export class PredictionWorld
 
         const replacement = this.createWorld()
         const previous = this.world
+        const previousInputs = this.lastInputs
+        const previousMetadata = this.stateMetadata
+        const previousEvents = this.eventsByTick
+        const previousQueuedInputs = this.queuedInputs
+        const previousEventCursor = this.eventCursor
+
         this.world = replacement
-        this.lastInputs.clear()
-        this.eventsByTick.clear()
+        this.lastInputs = new Map()
+        this.stateMetadata = new Map()
+        this.eventsByTick = new Map()
 
         try
         {
@@ -312,7 +504,10 @@ export class PredictionWorld
                 if((Number(descriptor.flags) & HAS_BODY_FLAG) === 0)
                     continue
 
-                this.add(order, normalizeSpawn(this.mapData, descriptor.spawnIndex))
+                this.add(order, {
+                    ...normalizeSpawn(this.mapData, descriptor.spawnIndex),
+                    ...copyMetadata(descriptor),
+                })
             }
 
             this.world.restoreSnapshot(Uint8Array.from(sync.snapshot))
@@ -329,6 +524,7 @@ export class PredictionWorld
                 vehicle.confirmedInputSequence = sequence
                 vehicle.input.sequence = sequence
                 this.lastInputs.set(order, copyInput(vehicle.input))
+                this.stateMetadata.set(order, copyMetadata(descriptor))
             }
 
             this.queuedInputs = sync.queuedInputs.map(copyQueuedInput).sort(compareInputs)
@@ -338,6 +534,11 @@ export class PredictionWorld
         {
             this.world.destroy()
             this.world = previous
+            this.lastInputs = previousInputs
+            this.stateMetadata = previousMetadata
+            this.eventsByTick = previousEvents
+            this.queuedInputs = previousQueuedInputs
+            this.eventCursor = previousEventCursor
             throw error
         }
 
@@ -353,6 +554,7 @@ export class PredictionWorld
         this.destroyed = true
         this.eventsByTick.clear()
         this.lastInputs.clear()
+        this.stateMetadata.clear()
         this.queuedInputs.length = 0
         this.world.destroy()
     }

@@ -1,4 +1,5 @@
 import { RemoteVehicle } from '../Multiplayer/RemoteVehicle.js'
+import { VisualCorrection } from './VisualCorrection.js'
 
 function cloneVector(value, length, label)
 {
@@ -44,6 +45,7 @@ export class VehicleVisuals
         physicalVehicle = game?.physicalVehicle,
         vehicleTemplate,
         RemoteVehicleClass = RemoteVehicle,
+        correction = new VisualCorrection(),
     } = {})
     {
         if(!predictionWorld || typeof predictionWorld.readState !== 'function')
@@ -54,12 +56,17 @@ export class VehicleVisuals
             throw new TypeError('physical vehicle must implement applyExternalState')
         if(typeof RemoteVehicleClass !== 'function')
             throw new TypeError('RemoteVehicleClass must be a constructor')
+        if(!correction || typeof correction.capture !== 'function')
+            throw new TypeError('correction must implement capture')
+        if(typeof correction.advance !== 'function' || typeof correction.apply !== 'function')
+            throw new TypeError('correction must implement advance and apply')
 
         this.game = game
         this.predictionWorld = predictionWorld
         this.physicalVehicle = physicalVehicle
         this.vehicleTemplate = vehicleTemplate
         this.RemoteVehicleClass = RemoteVehicleClass
+        this.correction = correction
         this.remoteVehicles = new Map()
         this.localEntityOrder = null
         this.destroyed = false
@@ -88,6 +95,13 @@ export class VehicleVisuals
         return true
     }
 
+    reconcile(beforeStates, afterStates, options = {})
+    {
+        if(this.destroyed)
+            return 0
+        return this.correction.capture(beforeStates, afterStates, options)
+    }
+
     createRemote(entityOrder)
     {
         if(!this.vehicleTemplate)
@@ -103,11 +117,12 @@ export class VehicleVisuals
         return remote
     }
 
-    update()
+    update(deltaSeconds = 0)
     {
         if(this.destroyed)
             return 0
 
+        this.correction.advance(deltaSeconds)
         const states = this.predictionWorld.readState()
         if(!Array.isArray(states))
             throw new TypeError('predictionWorld.readState() must return an array')
@@ -115,7 +130,7 @@ export class VehicleVisuals
         const seenRemotes = new Set()
         for(const sourceState of states)
         {
-            const state = cloneVisualState(sourceState)
+            const state = cloneVisualState(this.correction.apply(sourceState))
             if(state.entityOrder === this.localEntityOrder)
             {
                 this.physicalVehicle.applyExternalState(state)
@@ -147,6 +162,7 @@ export class VehicleVisuals
             return
 
         this.destroyed = true
+        this.correction.clear?.()
         for(const remote of this.remoteVehicles.values())
             remote.destroy()
         this.remoteVehicles.clear()
