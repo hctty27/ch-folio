@@ -25,6 +25,9 @@ const makeInput = (clientTick, sequence, steering = 0) => quantizeInput({
     honking: false,
 })
 
+// FULL_SYNC currently carries the Rapier snapshot, entity descriptors and queued
+// inputs. Controller metadata is restored by the later lifecycle integration task,
+// so this comparison intentionally covers only snapshot-backed physical state.
 const physicalState = (state) => ({
     entityOrder: state.entityOrder,
     position: state.position.map(Math.fround),
