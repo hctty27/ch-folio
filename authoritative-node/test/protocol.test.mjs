@@ -29,6 +29,18 @@ function withTimeout(promise, label, timeoutMs = TEST_TIMEOUT_MS)
     return Promise.race([ promise, timeout ]).finally(() => clearTimeout(timer))
 }
 
+async function waitForCondition(condition, label, timeoutMs = TEST_TIMEOUT_MS)
+{
+    const deadline = Date.now() + timeoutMs
+    while(Date.now() < deadline)
+    {
+        if(condition())
+            return
+        await new Promise((resolve) => setImmediate(resolve))
+    }
+    throw new Error(`${label} timed out after ${timeoutMs}ms`)
+}
+
 class FrameCollector
 {
     constructor(socket)
@@ -139,7 +151,10 @@ test('HELLO, sync-ready, input, state, and full-sync request form one binary lif
 
     const room = service.registry.get('alpha')
     client.socket.send(encodeSyncReady())
-    await room.flushMessages()
+    await waitForCondition(
+        () => room.simulation.getSlot(1).slotState === ROOM_SLOT_STATES.WAITING_SPAWN,
+        'sync-ready processing',
+    )
     assert.equal(room.simulation.getSlot(1).slotState, ROOM_SLOT_STATES.WAITING_SPAWN)
 
     const statePromise = client.collector.nextType(FRAME_TYPES.STATE)
@@ -162,7 +177,10 @@ test('HELLO, sync-ready, input, state, and full-sync request form one binary lif
         boosting: false,
         honking: false,
     }) ]))
-    await room.flushMessages()
+    await waitForCondition(
+        () => room.simulation.getSlot(1).queuedInputs.has(inputTick),
+        'input-batch processing',
+    )
     assert.equal(room.simulation.getSlot(1).queuedInputs.has(inputTick), true)
 
     const syncPromise = client.collector.nextType(FRAME_TYPES.FULL_SYNC)
