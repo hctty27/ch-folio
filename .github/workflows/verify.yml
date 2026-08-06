@@ -6,7 +6,9 @@ on:
       - main
       - 'feat/**'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feat/authoritative-physics-foundation
   workflow_dispatch:
 
 permissions:
