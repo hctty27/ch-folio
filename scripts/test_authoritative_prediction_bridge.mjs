@@ -25,9 +25,9 @@ const makeInput = (clientTick, sequence, steering = 0) => quantizeInput({
     honking: false,
 })
 
-// FULL_SYNC currently carries the Rapier snapshot, entity descriptors and queued
-// inputs. Controller metadata is restored by the later lifecycle integration task,
-// so this comparison intentionally covers only snapshot-backed physical state.
+// A legacy FULL_SYNC without controller metadata still restores its exact Rapier
+// state. Task 15 adds runtime metadata for future deterministic continuation, but
+// keeps this zero-length compatibility path for older fixtures and peers.
 const physicalState = (state) => ({
     entityOrder: state.entityOrder,
     position: state.position.map(Math.fround),
@@ -100,9 +100,10 @@ test('prediction world restores a full-room Rapier snapshot and queued inputs', 
         eventCursor: 7,
         snapshot: source.world.takeSnapshot(),
         entities: [
-            { entityOrder: 1, flags: 1, spawnIndex: 0, lastConfirmedSequence: 101 },
-            { entityOrder: 2, flags: 1, spawnIndex: 1, lastConfirmedSequence: 202 },
+            { entityOrder: 1, flags: 1, spawnIndex: 0, lastConfirmedSequence: 101, controllerOffset: 0, controllerLength: 0 },
+            { entityOrder: 2, flags: 1, spawnIndex: 1, lastConfirmedSequence: 202, controllerOffset: 0, controllerLength: 0 },
         ],
+        controllerMetadata: new Uint8Array(),
         queuedInputs: [
             { entityOrder: 1, input: makeInput(3, 103, 0.1) },
             { entityOrder: 2, input: makeInput(3, 203, -0.1) },

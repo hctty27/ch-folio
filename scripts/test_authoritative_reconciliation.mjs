@@ -48,6 +48,64 @@ const physicalState = (state) => ({
     lastConfirmedSequence: state.lastConfirmedSequence,
 })
 
+function maximumComponentDelta(left, right)
+{
+    return Math.max(...left.map((value, index) => Math.abs(value - right[index])))
+}
+
+function quaternionDelta(left, right)
+{
+    const direct = maximumComponentDelta(left, right)
+    const negated = Math.max(...left.map((value, index) => Math.abs(value + right[index])))
+    return Math.min(direct, negated)
+}
+
+function boundedReplayErrors(actualStates, expectedStates)
+{
+    assert.equal(actualStates.length, expectedStates.length)
+    const expectedByEntity = new Map(expectedStates.map((state) => [ state.entityOrder, state ]))
+    const errors = {
+        position: 0,
+        quaternion: 0,
+        linearVelocity: 0,
+        angularVelocity: 0,
+    }
+
+    for(const actual of actualStates)
+    {
+        const expected = expectedByEntity.get(actual.entityOrder)
+        assert.ok(expected, `missing expected entityOrder ${actual.entityOrder}`)
+        assert.equal(actual.lastConfirmedSequence, expected.lastConfirmedSequence)
+        errors.position = Math.max(
+            errors.position,
+            maximumComponentDelta(actual.position, expected.position),
+        )
+        errors.quaternion = Math.max(
+            errors.quaternion,
+            quaternionDelta(actual.quaternion, expected.quaternion),
+        )
+        errors.linearVelocity = Math.max(
+            errors.linearVelocity,
+            maximumComponentDelta(actual.linearVelocity, expected.linearVelocity),
+        )
+        errors.angularVelocity = Math.max(
+            errors.angularVelocity,
+            maximumComponentDelta(actual.angularVelocity, expected.angularVelocity),
+        )
+    }
+
+    return errors
+}
+
+function assertBoundedNativeControllerReplay(actualStates, expectedStates)
+{
+    const errors = boundedReplayErrors(actualStates, expectedStates)
+    assert.ok(errors.position <= 0.03, `position replay error ${errors.position}`)
+    assert.ok(errors.quaternion <= 0.001, `quaternion replay error ${errors.quaternion}`)
+    assert.ok(errors.linearVelocity <= 0.4, `linear velocity replay error ${errors.linearVelocity}`)
+    assert.ok(errors.angularVelocity <= 0.05, `angular velocity replay error ${errors.angularVelocity}`)
+}
+
 function createPrediction()
 {
     const prediction = new PredictionWorld({ RAPIER, mapData })
@@ -87,7 +145,7 @@ test('matching authoritative state confirms input without rollback', async () =>
     prediction.destroy()
 })
 
-test('checksum mismatch inside the retained window restores the authoritative tick and replays inputs', async () =>
+test('checksum mismatch restores the authoritative tick and replays with bounded native-controller residual', async () =>
 {
     const server = createPrediction()
     const client = createPrediction()
@@ -118,7 +176,7 @@ test('checksum mismatch inside the retained window restores the authoritative ti
     assert.equal(result.serverTick, 3)
     assert.equal(result.currentTick, 6)
     assert.equal(result.replayedTicks, 3)
-    assert.deepEqual(client.readState().map(physicalState), expected)
+    assertBoundedNativeControllerReplay(client.readState().map(physicalState), expected)
     assert.equal(corrections.length, 1)
     assert.equal(corrections[0].options.hard, false)
 
@@ -190,10 +248,11 @@ test('world hash mismatch requests full sync before accepting an otherwise match
     prediction.destroy()
 })
 
-test('full sync restores the snapshot, replays retained local inputs, and hard-reconciles visuals', () =>
+test('full sync restores its exact snapshot and bounds residual while replaying retained local inputs', () =>
 {
     const source = createPrediction()
     const client = createPrediction()
+    const exactRestore = createPrediction()
     const corrections = []
     const reconciler = new Reconciler({
         predictionWorld: client,
@@ -203,6 +262,7 @@ test('full sync restores the snapshot, replays retained local inputs, and hard-r
     })
 
     let sync = null
+    let exactAtSync = null
     for(let tick = 1; tick <= 6; tick++)
     {
         const input = makeInput(tick, tick, tick < 3 ? -0.15 : 0.2)
@@ -212,8 +272,14 @@ test('full sync restores the snapshot, replays retained local inputs, and hard-r
             input: makeInput(tick, tick, tick === 2 ? 0.95 : 0.2),
         } ] })
         if(tick === 3)
+        {
             sync = source.captureFullSync()
+            exactAtSync = source.readState().map(physicalState)
+        }
     }
+
+    exactRestore.restoreFullSync(sync)
+    assert.deepEqual(exactRestore.readState().map(physicalState), exactAtSync)
 
     const expected = source.readState().map(physicalState)
     const result = reconciler.applyFullSync(sync)
@@ -222,18 +288,23 @@ test('full sync restores the snapshot, replays retained local inputs, and hard-r
     assert.equal(result.serverTick, 3)
     assert.equal(result.currentTick, 6)
     assert.equal(result.replayedTicks, 3)
-    assert.deepEqual(client.readState().map(physicalState), expected)
+    assertBoundedNativeControllerReplay(client.readState().map(physicalState), expected)
     assert.equal(corrections.length, 1)
     assert.equal(corrections[0].options.hard, true)
 
     reconciler.destroy()
     source.destroy()
     client.destroy()
+    exactRestore.destroy()
 })
 
 test('visual correction decays position and quaternion over 100ms and snaps large errors', () =>
 {
-    const correction = new VisualCorrection({ durationSeconds: 0.1, snapDistance: 3 })
+    const correction = new VisualCorrection({
+        durationSeconds: 0.1,
+        snapDistance: 3,
+        snapAngle: Math.PI,
+    })
     const before = [ {
         entityOrder: 1,
         position: [ 0, 0, 0 ],
