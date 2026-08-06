@@ -30,16 +30,35 @@ The v1 route and wire contract are intentionally unchanged:
 /ws?room=public&protocol=2
 ```
 
-For Task 10 it implements only the isolated binary handshake boundary:
+The current server-side protocol-v2 flow is:
 
-1. Accept the WebSocket through the Durable Object hibernation API.
-2. Send a fixed binary `HELLO_REQUIRED` protocol-v2 error frame.
-3. Require the first client frame to be a valid binary HELLO carrying the exact protocol, vehicle-physics, and map-collision versions.
-4. Record only handshake state in the serialized WebSocket attachment.
+1. Accept the WebSocket through the Durable Object Hibernation API.
+2. Send a fixed binary `HELLO_REQUIRED` frame.
+3. Accept a binary HELLO for a new session or a binary RESUME for a disconnected session.
+4. Return a binary session grant containing a random 32-byte resume token.
+5. Send a binary FULL_SYNC frame before starting or resuming normal state delivery.
+6. Run the authoritative Rapier room at a fixed 60 Hz while at least one slot exists.
+7. Broadcast a binary STATE frame every three ticks, producing a 20 Hz network cadence.
 
-No session, player slot, vehicle body, Rapier world, or simulation timer is created during this task. Those responsibilities are added by later authoritative multiplayer tasks.
+The room keeps at most eight stable entity slots. Resume-token digests, session state, connection generations, Rapier state, and the room scheduler remain in active Durable Object memory; gameplay state is not written to SQLite.
+
+A disconnected slot remains reserved for exactly 180 server ticks. A valid RESUME rotates the token and increments the connection generation. When the final slot expires or is released, the scheduler stops and the Rapier world, room simulation, pending hashes, and transient metrics are destroyed.
 
 Both Durable Object classes are declared through Wrangler `exports` with SQLite storage. Do not add a legacy `migrations` section to this configuration.
+
+## Authoritative timing and diagnostics
+
+The protocol-v2 room uses integer logical ticks and never passes elapsed wall-clock time into physics:
+
+- Simulation rate: 60 Hz.
+- State broadcast rate: 20 Hz.
+- Maximum catch-up work per scheduler callback: three ticks.
+- World snapshot/hash cadence: every 60 ticks.
+- Metrics summary cadence: every 600 ticks.
+
+At a hash boundary the Worker copies the Rapier snapshot synchronously, then calculates SHA-256 asynchronously. The completed hash is attached to the first later STATE frame, so hashing never changes the physics step size.
+
+Metrics include scheduler overload, catch-up work, queued-input depth, occupied slots, decode/encode/broadcast time, snapshot/checksum time, controller-update time, and total Rapier-step time. The frozen Rapier `0.17.3` build does not expose the newer internal broad-phase, narrow-phase, CCD, and solver timing methods; those methods are probed defensively and reported only when available.
 
 ## Requirements
 
@@ -72,7 +91,7 @@ The v1 WebSocket endpoint is normally:
 ws://localhost:8787/ws?room=public
 ```
 
-The isolated v2 handshake endpoint is normally:
+The v2 authoritative endpoint is normally:
 
 ```text
 ws://localhost:8787/ws?room=public&protocol=2
@@ -103,7 +122,7 @@ VITE_MULTIPLAYER_ROOM=public
 
 Rebuild and redeploy the Vite frontend after changing any `VITE_*` variable.
 
-The browser does not route production gameplay to protocol v2 yet. Task 10 only establishes the separate server-side route and handshake boundary.
+The browser does not route production gameplay to protocol v2 yet. The authoritative server loop is implemented, but the protocol-v2 browser transport, prediction, reconciliation, and remote rendering integration are later tasks.
 
 ## Smoke test
 
@@ -117,12 +136,16 @@ The browser does not route production gameplay to protocol v2 yet. Task 10 only 
 6. Refresh one window and confirm its old remote vehicle disappears before the new session joins.
 7. Temporarily remove `VITE_MULTIPLAYER_ENABLED` and confirm local single-player driving still works.
 
-### Protocol v2 routing
+### Protocol v2 server
 
 1. Open a WebSocket to `/ws?room=smoke&protocol=2`.
-2. Confirm the first server message is a binary protocol-v2 `HELLO_REQUIRED` frame.
-3. Send a valid binary HELLO and confirm the socket remains open.
-4. Confirm `/ws?room=smoke&protocol=3` returns HTTP 400 with supported versions `[1, 2]`.
+2. Confirm the first server message is a binary `HELLO_REQUIRED` frame.
+3. Send a compatible binary HELLO.
+4. Confirm the server returns a binary session grant followed by FULL_SYNC.
+5. Confirm STATE frames arrive at a 20 Hz logical cadence with monotonically increasing server ticks.
+6. Disconnect, reconnect within 180 server ticks using RESUME, and confirm the token rotates.
+7. Confirm the previous token is rejected after a successful resume.
+8. Confirm `/ws?room=smoke&protocol=3` returns HTTP 400 with supported versions `[1, 2]`.
 
 ## Current limits
 
@@ -137,10 +160,12 @@ The browser does not route production gameplay to protocol v2 yet. Task 10 only 
 
 ### Protocol v2
 
-- Binary handshake only in Task 10.
-- No session allocation or resume token yet.
-- No authoritative 60 Hz loop or state broadcast yet.
-- No browser protocol-v2 transport enabled yet.
+- Maximum eight occupied or grace-period slots per room.
+- Fixed 60 Hz authoritative simulation and 20 Hz state delivery.
+- Three-tick input-buffer contract exists in the shared room simulation.
+- 180-tick resume grace with token rotation and connection-generation takeover.
+- No protocol-v2 browser transport, local prediction, reconciliation, or production rendering path yet.
+- Active rooms intentionally keep a scheduler callback pending; empty rooms stop the timer and become eligible for hibernation.
 
 ## Protocol compatibility
 
