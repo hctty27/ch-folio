@@ -42,7 +42,6 @@ const SESSION_FAILURE_MESSAGE = 'SESSION_FAILURE'
 
 const STATE_BROADCAST_INTERVAL_TICKS = 3
 const WORLD_HASH_INTERVAL_TICKS = 60
-const AUTHORITATIVE_MAP = loadAuthoritativeMap(mapSource)
 
 const RAPIER_TIMING_METHODS = Object.freeze({
     rapierBroadPhase: 'timingBroadPhase',
@@ -114,6 +113,7 @@ export class AuthoritativeGameRoom extends DurableObject<Env>
         metrics: this.metrics,
         onTick: () => this.advanceOneTick(),
     })
+    private authoritativeMap: ReturnType<typeof loadAuthoritativeMap> | null = null
     private authoritativeWorld: AuthoritativeWorld | null = null
     private simulation: RoomSimulation | null = null
     private currentTick = 0
@@ -282,12 +282,17 @@ export class AuthoritativeGameRoom extends DurableObject<Env>
 
     private ensureRuntime(): void
     {
-        if(this.simulation !== null && this.authoritativeWorld !== null)
+        if(
+            this.authoritativeMap !== null
+            && this.authoritativeWorld !== null
+            && this.simulation !== null
+        )
             return
 
+        const mapData = loadAuthoritativeMap(mapSource)
         const world = new AuthoritativeWorld({
             RAPIER,
-            mapData: AUTHORITATIVE_MAP,
+            mapData,
         })
         const originalStep = world.step.bind(world)
         world.step = () =>
@@ -298,12 +303,24 @@ export class AuthoritativeGameRoom extends DurableObject<Env>
             return result
         }
 
+        let simulation: RoomSimulation
+        try
+        {
+            simulation = new RoomSimulation({
+                world,
+                mapData,
+            })
+        }
+        catch(error)
+        {
+            world.destroy()
+            throw error
+        }
+
+        this.authoritativeMap = mapData
         this.authoritativeWorld = world
-        this.simulation = new RoomSimulation({
-            world,
-            mapData: AUTHORITATIVE_MAP,
-        })
-        this.currentTick = this.simulation.currentTick
+        this.simulation = simulation
+        this.currentTick = simulation.currentTick
         this.eventCursor = 0
         this.completedWorldHash = null
         this.completedWorldHashQueue.length = 0
@@ -777,6 +794,7 @@ export class AuthoritativeGameRoom extends DurableObject<Env>
         this.scheduler.stop()
         this.runtimeGeneration++
         this.authoritativeWorld?.destroy()
+        this.authoritativeMap = null
         this.authoritativeWorld = null
         this.simulation = null
         this.currentTick = 0
@@ -785,8 +803,7 @@ export class AuthoritativeGameRoom extends DurableObject<Env>
         this.completedWorldHash = null
         this.completedWorldHashQueue.length = 0
         this.rapierInternalTimingAvailable = false
-        this.metrics.recordQueueDepth(0)
-        this.metrics.setSlots(0)
+        this.metrics.reset()
     }
 
     private getAttachment(socket: WebSocket): AuthoritativeSocketAttachment
