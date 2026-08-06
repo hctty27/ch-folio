@@ -1,15 +1,284 @@
 {
-  "id":"angled-squeeze",
-  "ticks":120,
-  "entities":[
-    {"entityOrder":1,"position":[-8,0.5,10],"quaternion":[0,-0.19509,0,0.980785],"linearVelocity":[12,0,5],"angularVelocity":[0,0,0]},
-    {"entityOrder":2,"position":[8,0.5,10],"quaternion":[0,0.19509,0,0.980785],"linearVelocity":[-12,0,5],"angularVelocity":[0,0,0]},
-    {"entityOrder":3,"position":[0,0.5,18],"quaternion":[0,0.707106781,0,0.707106781],"linearVelocity":[0,0,-10],"angularVelocity":[0,0,0]}
+  "id": "angled-squeeze",
+  "ticks": 120,
+  "entities": [
+    {
+      "entityOrder": 1,
+      "position": [
+        -8,
+        0.5,
+        10
+      ],
+      "quaternion": [
+        0,
+        -0.19509,
+        0,
+        0.980785
+      ],
+      "linearVelocity": [
+        12,
+        0,
+        5
+      ],
+      "angularVelocity": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "entityOrder": 2,
+      "position": [
+        8,
+        0.5,
+        10
+      ],
+      "quaternion": [
+        0,
+        0.19509,
+        0,
+        0.980785
+      ],
+      "linearVelocity": [
+        -12,
+        0,
+        5
+      ],
+      "angularVelocity": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "entityOrder": 3,
+      "position": [
+        0,
+        0.5,
+        18
+      ],
+      "quaternion": [
+        0,
+        0.707106781,
+        0,
+        0.707106781
+      ],
+      "linearVelocity": [
+        0,
+        0,
+        -10
+      ],
+      "angularVelocity": [
+        0,
+        0,
+        0
+      ]
+    }
   ],
-  "inputs":[
-    {"tick":1,"entityOrder":1,"sequence":1,"throttle":80,"brake":0,"steering":2500,"suspensions":0,"flags":0},
-    {"tick":1,"entityOrder":2,"sequence":1,"throttle":80,"brake":0,"steering":-2500,"suspensions":0,"flags":0},
-    {"tick":1,"entityOrder":3,"sequence":1,"throttle":80,"brake":0,"steering":0,"suspensions":0,"flags":0}
+  "inputs": [
+    {
+      "tick": 1,
+      "entityOrder": 1,
+      "sequence": 1,
+      "throttle": 80,
+      "brake": 0,
+      "steering": 2500,
+      "suspensions": 0,
+      "flags": 0
+    },
+    {
+      "tick": 1,
+      "entityOrder": 2,
+      "sequence": 1,
+      "throttle": 80,
+      "brake": 0,
+      "steering": -2500,
+      "suspensions": 0,
+      "flags": 0
+    },
+    {
+      "tick": 1,
+      "entityOrder": 3,
+      "sequence": 1,
+      "throttle": 80,
+      "brake": 0,
+      "steering": 0,
+      "suspensions": 0,
+      "flags": 0
+    }
   ],
-  "expected":{"checksums":[],"snapshotHashes":[]}
+  "expected": {
+    "checksums": [
+      {
+        "tick": 3,
+        "checksum32": 811352563
+      },
+      {
+        "tick": 6,
+        "checksum32": 2721721121
+      },
+      {
+        "tick": 9,
+        "checksum32": 2434912212
+      },
+      {
+        "tick": 12,
+        "checksum32": 3794798206
+      },
+      {
+        "tick": 15,
+        "checksum32": 2568100532
+      },
+      {
+        "tick": 18,
+        "checksum32": 3618850807
+      },
+      {
+        "tick": 21,
+        "checksum32": 1981804528
+      },
+      {
+        "tick": 24,
+        "checksum32": 2600817482
+      },
+      {
+        "tick": 27,
+        "checksum32": 1321830605
+      },
+      {
+        "tick": 30,
+        "checksum32": 4246576558
+      },
+      {
+        "tick": 33,
+        "checksum32": 596376601
+      },
+      {
+        "tick": 36,
+        "checksum32": 19138750
+      },
+      {
+        "tick": 39,
+        "checksum32": 1831983252
+      },
+      {
+        "tick": 42,
+        "checksum32": 2907714423
+      },
+      {
+        "tick": 45,
+        "checksum32": 2103893385
+      },
+      {
+        "tick": 48,
+        "checksum32": 2729196802
+      },
+      {
+        "tick": 51,
+        "checksum32": 336935321
+      },
+      {
+        "tick": 54,
+        "checksum32": 1255966954
+      },
+      {
+        "tick": 57,
+        "checksum32": 4042673396
+      },
+      {
+        "tick": 60,
+        "checksum32": 2395439830
+      },
+      {
+        "tick": 63,
+        "checksum32": 2580399887
+      },
+      {
+        "tick": 66,
+        "checksum32": 445883432
+      },
+      {
+        "tick": 69,
+        "checksum32": 1360422307
+      },
+      {
+        "tick": 72,
+        "checksum32": 2181328958
+      },
+      {
+        "tick": 75,
+        "checksum32": 433721408
+      },
+      {
+        "tick": 78,
+        "checksum32": 89546442
+      },
+      {
+        "tick": 81,
+        "checksum32": 1822449233
+      },
+      {
+        "tick": 84,
+        "checksum32": 1433777820
+      },
+      {
+        "tick": 87,
+        "checksum32": 774604562
+      },
+      {
+        "tick": 90,
+        "checksum32": 3002235231
+      },
+      {
+        "tick": 93,
+        "checksum32": 281726370
+      },
+      {
+        "tick": 96,
+        "checksum32": 3046002076
+      },
+      {
+        "tick": 99,
+        "checksum32": 4147495965
+      },
+      {
+        "tick": 102,
+        "checksum32": 3700494447
+      },
+      {
+        "tick": 105,
+        "checksum32": 1466118112
+      },
+      {
+        "tick": 108,
+        "checksum32": 2159690314
+      },
+      {
+        "tick": 111,
+        "checksum32": 554385046
+      },
+      {
+        "tick": 114,
+        "checksum32": 3987339573
+      },
+      {
+        "tick": 117,
+        "checksum32": 4221829040
+      },
+      {
+        "tick": 120,
+        "checksum32": 3992194510
+      }
+    ],
+    "snapshotHashes": [
+      {
+        "tick": 60,
+        "sha256": "4d9885b0f0f6e7178f929ba453e937c0649ac14ed12b8f5c1907b8f4e8fcdf34"
+      },
+      {
+        "tick": 120,
+        "sha256": "c7ef017d0f0e3f2474c76272f2cfe5b8b10f6f1ed1db099702cefc7169a3796b"
+      }
+    ]
+  }
 }
