@@ -194,5 +194,6 @@ test('external local physics and authoritative remote rendering remain isolated 
     assert.match(remoteSource, /applyAuthoritativeState\(state\)/)
     assert.match(remoteSource, /mode\s*===\s*['"]snapshot['"]\s*\?\s*new SnapshotBuffer\(\)\s*:\s*null/)
     assert.doesNotMatch(remoteSource, /RAPIER|PhysicsVehicle|createRigidBody|createCollider/)
-    assert.doesNotMatch(entrySource, /MultiplayerV2/)
+    assert.match(entrySource, /VITE_MULTIPLAYER_PROTOCOL/)
+    assert.match(entrySource, /multiplayerProtocol\s*===\s*['"]2['"][\s\S]*new AuthoritativeMultiplayer\(game\)/)
 })
