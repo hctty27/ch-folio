@@ -12,9 +12,11 @@ Protocol v1 remains the production multiplayer path. This package does not chang
 ## Install and test
 
 ```bash
-npm install --prefix authoritative-node --ignore-scripts
+npm ci --prefix authoritative-node --ignore-scripts
 npm test --prefix authoritative-node
 ```
+
+The committed lockfile freezes the Node server dependency tree for CI and deployment. `npm ci` fails instead of rewriting the lockfile when `package.json` and `package-lock.json` diverge.
 
 The test suite uses real loopback WebSockets and also runs all eleven committed deterministic collision fixtures. It must match 440 checksum samples and 22 snapshot hashes exactly.
 
