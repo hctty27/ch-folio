@@ -27,6 +27,12 @@ jobs:
           python-version: '3.12'
       - run: npm ci
       - run: node --test packages/authoritative-physics/test/*.test.mjs
+      - name: Reject deterministic expectation updates in CI
+        run: |
+          if UPDATE_EXPECTED=1 npm run test:authoritative-scenarios; then
+            echo "scenario updater unexpectedly succeeded in CI"
+            exit 1
+          fi
       - run: python -m pip install numpy trimesh
       - run: npm test
       - run: npm run build
