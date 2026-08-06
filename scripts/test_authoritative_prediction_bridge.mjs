@@ -31,7 +31,6 @@ const physicalState = (state) => ({
     quaternion: state.quaternion.map(Math.fround),
     linearVelocity: state.linearVelocity.map(Math.fround),
     angularVelocity: state.angularVelocity.map(Math.fround),
-    steering: Math.fround(state.steering),
     lastConfirmedSequence: state.lastConfirmedSequence,
 })
 
