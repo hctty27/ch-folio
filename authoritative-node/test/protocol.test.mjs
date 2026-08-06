@@ -17,6 +17,18 @@ import {
 } from '@ch-folio/authoritative-physics'
 import { createAuthoritativeServer } from '../src/server.js'
 
+const TEST_TIMEOUT_MS = 2000
+
+function withTimeout(promise, label, timeoutMs = TEST_TIMEOUT_MS)
+{
+    let timer
+    const timeout = new Promise((_, reject) =>
+    {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    })
+    return Promise.race([ promise, timeout ]).finally(() => clearTimeout(timer))
+}
+
 class FrameCollector
 {
     constructor(socket)
@@ -28,22 +40,41 @@ class FrameCollector
             const entry = { data: Uint8Array.from(data), isBinary }
             const waiter = this.waiters.shift()
             if(waiter)
+            {
+                clearTimeout(waiter.timer)
                 waiter.resolve(entry)
+            }
             else
                 this.frames.push(entry)
         })
         socket.on('error', (error) =>
         {
             const waiter = this.waiters.shift()
-            waiter?.reject(error)
+            if(waiter)
+            {
+                clearTimeout(waiter.timer)
+                waiter.reject(error)
+            }
         })
     }
 
-    next()
+    next(timeoutMs = TEST_TIMEOUT_MS)
     {
         if(this.frames.length > 0)
             return Promise.resolve(this.frames.shift())
-        return new Promise((resolve, reject) => this.waiters.push({ resolve, reject }))
+
+        return new Promise((resolve, reject) =>
+        {
+            const waiter = { resolve, reject, timer: null }
+            waiter.timer = setTimeout(() =>
+            {
+                const index = this.waiters.indexOf(waiter)
+                if(index >= 0)
+                    this.waiters.splice(index, 1)
+                reject(new Error(`binary frame timed out after ${timeoutMs}ms`))
+            }, timeoutMs)
+            this.waiters.push(waiter)
+        })
     }
 
     async nextType(frameType, attempts = 20)
@@ -62,11 +93,11 @@ async function openClient(port, room)
 {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?room=${room}&protocol=2`)
     const collector = new FrameCollector(socket)
-    await new Promise((resolve, reject) =>
+    await withTimeout(new Promise((resolve, reject) =>
     {
         socket.once('open', resolve)
         socket.once('error', reject)
-    })
+    }), 'WebSocket open')
     const helloRequired = decodeErrorFrame((await collector.next()).data)
     assert.equal(helloRequired.message, 'HELLO_REQUIRED')
     return { socket, collector }
@@ -176,7 +207,7 @@ test('resume rotates credentials before expiry and the room disappears at tick 1
     const room = service.registry.get('resume')
 
     first.socket.close(1000, 'disconnect')
-    await new Promise((resolve) => first.socket.once('close', resolve))
+    await withTimeout(new Promise((resolve) => first.socket.once('close', resolve)), 'first close')
     await room.flushMessages()
 
     for(let tick = 0; tick < 179; tick++)
@@ -195,7 +226,7 @@ test('resume rotates credentials before expiry and the room disappears at tick 1
     assert.notDeepEqual(rotated.resumeToken, grant.resumeToken)
 
     resumedClient.socket.close(1000, 'disconnect again')
-    await new Promise((resolve) => resumedClient.socket.once('close', resolve))
+    await withTimeout(new Promise((resolve) => resumedClient.socket.once('close', resolve)), 'resumed close')
     await room.flushMessages()
     for(let tick = 0; tick < 180; tick++)
         room.advanceOneTick()
