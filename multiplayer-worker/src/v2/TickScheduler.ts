@@ -79,9 +79,10 @@ export class TickScheduler
         return true
     }
 
-    private nextDeadlineMs(): number
+    private deadlineForTick(tick: number): number
     {
-        return this.epochMs + (this.completedTicks + 1) * TICK_INTERVAL_MS
+        const elapsedMs = tick * 1000 / TICK_RATE_HZ
+        return this.epochMs + Math.ceil(elapsedMs - DEADLINE_TICK_EPSILON)
     }
 
     private scheduleNext(): void
@@ -89,7 +90,8 @@ export class TickScheduler
         if(!this.isRunning)
             return
 
-        const delayMs = Math.max(0, this.nextDeadlineMs() - this.clock.now())
+        const deadlineMs = this.deadlineForTick(this.completedTicks + 1)
+        const delayMs = Math.max(0, deadlineMs - this.clock.now())
         this.timer = this.clock.setTimeout(() => this.runCallback(), delayMs)
     }
 
