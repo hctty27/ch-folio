@@ -4,6 +4,8 @@ export const TICK_RATE_HZ = 60
 export const TICK_INTERVAL_MS = 1000 / TICK_RATE_HZ
 export const MAX_CATCH_UP_TICKS = 3
 
+const DEADLINE_TICK_EPSILON = 1e-9
+
 export interface TickSchedulerClock
 {
     now(): number
@@ -32,7 +34,8 @@ export class TickScheduler
     private readonly metrics?: Metrics
     private readonly clock: TickSchedulerClock
     private timer: unknown = null
-    private nextDeadlineMs = 0
+    private epochMs = 0
+    private completedTicks = 0
     private isRunning = false
 
     constructor({ onTick, metrics, clock = defaultClock }: TickSchedulerOptions)
@@ -56,7 +59,8 @@ export class TickScheduler
             return false
 
         this.isRunning = true
-        this.nextDeadlineMs = this.clock.now() + TICK_INTERVAL_MS
+        this.epochMs = this.clock.now()
+        this.completedTicks = 0
         this.scheduleNext()
         return true
     }
@@ -75,12 +79,17 @@ export class TickScheduler
         return true
     }
 
+    private nextDeadlineMs(): number
+    {
+        return this.epochMs + (this.completedTicks + 1) * TICK_INTERVAL_MS
+    }
+
     private scheduleNext(): void
     {
         if(!this.isRunning)
             return
 
-        const delayMs = Math.max(0, this.nextDeadlineMs - this.clock.now())
+        const delayMs = Math.max(0, this.nextDeadlineMs() - this.clock.now())
         this.timer = this.clock.setTimeout(() => this.runCallback(), delayMs)
     }
 
@@ -90,9 +99,13 @@ export class TickScheduler
         if(!this.isRunning)
             return
 
-        const nowMs = this.clock.now()
-        const overdueMs = Math.max(0, nowMs - this.nextDeadlineMs)
-        const dueTicks = 1 + Math.floor(overdueMs / TICK_INTERVAL_MS)
+        const elapsedMs = Math.max(0, this.clock.now() - this.epochMs)
+        const elapsedTicks = elapsedMs * TICK_RATE_HZ / 1000
+        const dueThroughNow = Math.max(
+            this.completedTicks + 1,
+            Math.floor(elapsedTicks + DEADLINE_TICK_EPSILON),
+        )
+        const dueTicks = dueThroughNow - this.completedTicks
         const executedTicks = Math.min(dueTicks, MAX_CATCH_UP_TICKS)
 
         this.metrics?.recordSchedulerCallback(dueTicks, executedTicks)
@@ -100,7 +113,7 @@ export class TickScheduler
         for(let index = 0; index < executedTicks && this.isRunning; index++)
         {
             this.onTick()
-            this.nextDeadlineMs += TICK_INTERVAL_MS
+            this.completedTicks++
         }
 
         this.scheduleNext()
