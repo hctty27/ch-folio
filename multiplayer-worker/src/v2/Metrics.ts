@@ -122,6 +122,17 @@ export class Metrics
         this.maxSlots = Math.max(this.maxSlots, this.slots)
     }
 
+    reset(): void
+    {
+        this.phases = new Map()
+        this.windowStartTick = null
+        this.scheduler = this.emptyScheduler()
+        this.queueDepth = 0
+        this.maxQueueDepth = 0
+        this.slots = 0
+        this.maxSlots = 0
+    }
+
     completeTick(tick: number): MetricsSummary | null
     {
         const currentTick = nonNegativeInteger(tick, 'tick')
