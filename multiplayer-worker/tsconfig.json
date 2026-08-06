@@ -10,6 +10,7 @@
     "allowImportingTsExtensions": false,
     "allowJs": true,
     "checkJs": false,
+    "resolveJsonModule": true,
     "types": [
       "@cloudflare/vitest-pool-workers/types"
     ]
