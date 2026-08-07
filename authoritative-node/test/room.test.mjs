@@ -136,6 +136,8 @@ test('live room metrics record completed ticks, slot maximum, and queued input d
         assert.equal(summary.gauges.maxSlots, 1)
         assert.equal(summary.gauges.maxQueueDepth, 1)
         assert.equal('simulationAdvance' in summary.phases, false)
+        assert.equal('rapierStep' in summary.phases, false)
+        assert.equal('simulationNonRapier' in summary.phases, false)
         assert.equal('stateBroadcast' in summary.phases, false)
     }
     finally
@@ -169,6 +171,8 @@ test('benchmark-enabled live room records tick phase breakdown without changing 
         const summary = room.metrics.readBenchmarkSummary()
         for(const phase of [
             'simulationAdvance',
+            'rapierStep',
+            'simulationNonRapier',
             'sessionSync',
             'graceExpiry',
             'worldHashCapture',
@@ -180,6 +184,8 @@ test('benchmark-enabled live room records tick phase breakdown without changing 
             assert.equal(summary.phases[phase].count, 60)
             assert.ok(summary.phases[phase].maxMs >= 0)
         }
+        assert.ok(summary.phases.simulationAdvance.totalMs >= summary.phases.rapierStep.totalMs)
+        assert.ok(summary.phases.simulationAdvance.totalMs >= summary.phases.simulationNonRapier.totalMs)
         assert.equal(summary.phases.totalTick.count, 60)
     }
     finally
