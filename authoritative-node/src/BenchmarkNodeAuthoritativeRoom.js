@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks'
-import { cpuUsage } from 'node:process'
+import { cpuUsage, resourceUsage } from 'node:process'
 
 import { encodeStateFrame } from '@ch-folio/authoritative-physics'
 import { NodeAuthoritativeRoom } from './NodeAuthoritativeRoom.js'
@@ -8,6 +8,20 @@ function cpuMilliseconds(started)
 {
     const usage = cpuUsage(started)
     return (usage.user + usage.system) / 1000
+}
+
+function contextSwitchDelta(started, completed)
+{
+    return {
+        voluntary: Math.max(
+            0,
+            completed.voluntaryContextSwitches - started.voluntaryContextSwitches,
+        ),
+        involuntary: Math.max(
+            0,
+            completed.involuntaryContextSwitches - started.involuntaryContextSwitches,
+        ),
+    }
 }
 
 export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
@@ -91,12 +105,54 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
         }
     }
 
+    advanceOneTickWithBenchmarkPhases()
+    {
+        const resourceStarted = resourceUsage()
+        const cpuStarted = cpuUsage()
+        const rawRecordPhase = this.metrics.recordPhase
+        let recordedTickDiagnostics = false
+
+        this.metrics.recordPhase = (name, milliseconds) =>
+        {
+            if(name === 'totalTick' && !recordedTickDiagnostics)
+            {
+                recordedTickDiagnostics = true
+                const completedResource = resourceUsage()
+                const switches = contextSwitchDelta(resourceStarted, completedResource)
+                this.metrics.recordDiagnostic('totalTickCpuMs', cpuMilliseconds(cpuStarted))
+                this.metrics.recordDiagnostic(
+                    'totalTickVoluntaryContextSwitches',
+                    switches.voluntary,
+                )
+                this.metrics.recordDiagnostic(
+                    'totalTickInvoluntaryContextSwitches',
+                    switches.involuntary,
+                )
+            }
+            return rawRecordPhase.call(this.metrics, name, milliseconds)
+        }
+
+        try
+        {
+            return super.advanceOneTickWithBenchmarkPhases()
+        }
+        finally
+        {
+            this.metrics.recordPhase = rawRecordPhase
+        }
+    }
+
     broadcastState()
     {
+        const broadcastResourceStarted = resourceUsage()
+        const broadcastCpuStarted = cpuUsage()
+        const broadcastStarted = performance.now()
+
         let cpuStarted = cpuUsage()
         let started = performance.now()
         const state = this.simulation.readStateFrame(this.eventCursor)
-        this.metrics.recordPhase('stateRead', performance.now() - started)
+        const stateReadMs = performance.now() - started
+        this.metrics.recordPhase('stateRead', stateReadMs)
         this.metrics.recordPhase('stateReadCpu', cpuMilliseconds(cpuStarted))
 
         const completed = this.completedWorldHashes.shift() ?? null
@@ -105,7 +161,8 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
         cpuStarted = cpuUsage()
         started = performance.now()
         const frame = encodeStateFrame(state)
-        this.metrics.recordPhase('stateEncode', performance.now() - started)
+        const stateEncodeMs = performance.now() - started
+        this.metrics.recordPhase('stateEncode', stateEncodeMs)
         this.metrics.recordPhase('stateEncodeCpu', cpuMilliseconds(cpuStarted))
         this.eventCursor = state.eventCursor
 
@@ -138,6 +195,24 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
         this.metrics.recordPhase(
             'stateSocketSendLoopOverhead',
             Math.max(0, stateSocketSendMs - sendCallTotalMs),
+        )
+
+        const broadcastCpuMs = cpuMilliseconds(broadcastCpuStarted)
+        const completedResource = resourceUsage()
+        const switches = contextSwitchDelta(broadcastResourceStarted, completedResource)
+        const measuredBroadcastMs = performance.now() - broadcastStarted
+        this.metrics.recordPhase(
+            'stateBroadcastUnaccounted',
+            Math.max(0, measuredBroadcastMs - stateReadMs - stateEncodeMs - stateSocketSendMs),
+        )
+        this.metrics.recordDiagnostic('stateBroadcastCpuMs', broadcastCpuMs)
+        this.metrics.recordDiagnostic(
+            'stateBroadcastVoluntaryContextSwitches',
+            switches.voluntary,
+        )
+        this.metrics.recordDiagnostic(
+            'stateBroadcastInvoluntaryContextSwitches',
+            switches.involuntary,
         )
     }
 }
