@@ -1,51 +1,44 @@
 import http from 'node:http'
-import { WebSocketServer } from 'ws'
 import { RAPIER_VERSION, VERSIONS } from '@ch-folio/authoritative-physics'
-import { RoomRegistry } from './RoomRegistry.js'
+import { WebSocketServer } from 'ws'
 import { normalizeRoomName } from './roomName.js'
+import { RoomRegistry } from './RoomRegistry.js'
 
-const HEALTH_PATH = '/healthz'
-const WEBSOCKET_PATH = '/ws'
-const HEALTH_CACHE_CONTROL = 'no-store'
-const HEALTH_CONTENT_TYPE = 'application/json; charset=utf-8'
-const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000
+const JSON_HEADERS = Object.freeze({
+    'cache-control': 'no-store',
+    'content-type': 'application/json; charset=utf-8',
+})
+
 export const WEBSOCKET_LIMITS = Object.freeze({
     maxPayload: 64 * 1024,
     maxFragments: 64,
     maxBufferedChunks: 128,
 })
 
-function sendJson(response, statusCode, body)
+function writeJson(response, statusCode, value)
 {
-    const payload = Buffer.from(JSON.stringify(body), 'utf8')
+    const body = JSON.stringify(value)
     response.writeHead(statusCode, {
-        'content-type': HEALTH_CONTENT_TYPE,
-        'cache-control': HEALTH_CACHE_CONTROL,
-        'content-length': payload.byteLength,
+        ...JSON_HEADERS,
+        'content-length': Buffer.byteLength(body),
     })
-    response.end(payload)
+    response.end(body)
 }
 
 function rejectUpgrade(socket, statusCode, message)
 {
-    const body = Buffer.from(`${message}\n`, 'utf8')
+    if(socket.destroyed)
+        return
+    const body = JSON.stringify({ ok: false, error: message })
     socket.end(
-        `HTTP/1.1 ${statusCode} ${message}\r\n`
+        `HTTP/1.1 ${statusCode} ${http.STATUS_CODES[statusCode] ?? 'Error'}\r\n`
         + 'Connection: close\r\n'
         + 'Cache-Control: no-store\r\n'
-        + 'Content-Type: text/plain; charset=utf-8\r\n'
-        + `Content-Length: ${body.byteLength}\r\n`
+        + 'Content-Type: application/json; charset=utf-8\r\n'
+        + `Content-Length: ${Buffer.byteLength(body)}\r\n`
         + '\r\n'
-        + body.toString('utf8'),
+        + body,
     )
-}
-
-function activeSocketCount(registry)
-{
-    let total = 0
-    for(const room of registry.values())
-        total += room.activeSocketCount
-    return total
 }
 
 export function createAuthoritativeServer({
@@ -54,12 +47,9 @@ export function createAuthoritativeServer({
     benchmarkToken = null,
     roomFactory,
     roomOptions = {},
-    heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS,
+    heartbeatIntervalMs = 30000,
 } = {})
 {
-    const startedAt = Date.now()
-    let stopping = false
-    let heartbeat = null
     const registry = new RoomRegistry({
         roomFactory,
         roomOptions: {
@@ -67,106 +57,94 @@ export function createAuthoritativeServer({
             benchmarkToken,
         },
     })
-    const webSockets = new WebSocketServer({
+    const startedAt = process.hrtime.bigint()
+    const webSocketServer = new WebSocketServer({
         noServer: true,
         perMessageDeflate: false,
-        maxPayload: WEBSOCKET_LIMITS.maxPayload,
+        ...WEBSOCKET_LIMITS,
     })
+
+    let stopping = false
+    let startPromise = null
+    let stopPromise = null
+    let heartbeatTimer = null
+
     const server = http.createServer((request, response) =>
     {
-        let url
-        try
+        const url = new URL(request.url ?? '/', 'http://localhost')
+        if(request.method === 'GET' && url.pathname === '/healthz')
         {
-            url = new URL(request.url ?? '/', 'http://authoritative-node.invalid')
-        }
-        catch
-        {
-            response.writeHead(400).end()
+            const uptimeSeconds = Number(process.hrtime.bigint() - startedAt) / 1e9
+            writeJson(response, 200, {
+                ok: !stopping,
+                protocolVersion: VERSIONS.protocolVersion,
+                vehiclePhysicsVersion: VERSIONS.vehiclePhysicsVersion,
+                mapCollisionVersion: VERSIONS.mapCollisionVersion,
+                rapierVersion: RAPIER_VERSION,
+                nodeVersion: process.version,
+                uptimeSeconds,
+                roomCount: registry.size,
+                activeSocketCount: registry.activeSocketCount(),
+            })
             return
         }
-
-        if(request.method !== 'GET' || url.pathname !== HEALTH_PATH)
-        {
-            response.writeHead(404, { 'cache-control': HEALTH_CACHE_CONTROL }).end()
-            return
-        }
-
-        sendJson(response, 200, {
-            ok: true,
-            protocolVersion: VERSIONS.protocolVersion,
-            vehiclePhysicsVersion: VERSIONS.vehiclePhysicsVersion,
-            mapCollisionVersion: VERSIONS.mapCollisionVersion,
-            rapierVersion: RAPIER_VERSION,
-            nodeVersion: process.version,
-            uptimeSeconds: Math.max(0, (Date.now() - startedAt) / 1000),
-            roomCount: registry.size,
-            activeSocketCount: activeSocketCount(registry),
-        })
+        writeJson(response, 404, { ok: false, error: 'not_found' })
     })
 
     server.on('upgrade', (request, socket, head) =>
     {
         if(stopping)
         {
-            rejectUpgrade(socket, 503, 'Service Unavailable')
+            rejectUpgrade(socket, 503, 'server_stopping')
             return
         }
 
         let url
         try
         {
-            url = new URL(request.url ?? '/', 'http://authoritative-node.invalid')
+            url = new URL(request.url ?? '/', 'http://localhost')
         }
         catch
         {
-            rejectUpgrade(socket, 400, 'Bad Request')
+            rejectUpgrade(socket, 400, 'invalid_url')
             return
         }
 
-        if(url.pathname !== WEBSOCKET_PATH)
+        if(url.pathname !== '/ws')
         {
-            rejectUpgrade(socket, 404, 'Not Found')
+            rejectUpgrade(socket, 404, 'not_found')
             return
         }
         if(url.searchParams.get('protocol') !== String(VERSIONS.protocolVersion))
         {
-            rejectUpgrade(socket, 426, 'Upgrade Required')
+            rejectUpgrade(socket, 426, 'protocol_2_required')
             return
         }
 
         const roomName = normalizeRoomName(url.searchParams.get('room'))
         if(roomName === null)
         {
-            rejectUpgrade(socket, 400, 'Bad Request')
+            rejectUpgrade(socket, 400, 'invalid_room')
             return
         }
 
-        webSockets.handleUpgrade(request, socket, head, (webSocket) =>
+        webSocketServer.handleUpgrade(request, socket, head, (webSocket) =>
         {
+            webSocket.isAlive = true
+            webSocket.on('pong', () => { webSocket.isAlive = true })
             const room = registry.getOrCreate(roomName)
             room.attachSocket(webSocket)
+            webSocketServer.emit('connection', webSocket, request, { room: roomName })
         })
     })
 
-    if(heartbeatIntervalMs > 0)
-    {
-        webSockets.on('connection', (socket) =>
-        {
-            socket.isAlive = true
-            socket.on('pong', () =>
-            {
-                socket.isAlive = true
-            })
-        })
-    }
-
     function startHeartbeat()
     {
-        if(heartbeatIntervalMs <= 0 || heartbeat !== null)
+        if(!Number.isFinite(heartbeatIntervalMs) || heartbeatIntervalMs <= 0)
             return
-        heartbeat = setInterval(() =>
+        heartbeatTimer = setInterval(() =>
         {
-            for(const socket of webSockets.clients)
+            for(const socket of webSocketServer.clients)
             {
                 if(socket.isAlive === false)
                 {
@@ -177,68 +155,68 @@ export function createAuthoritativeServer({
                 socket.ping()
             }
         }, heartbeatIntervalMs)
-        heartbeat.unref?.()
-    }
-
-    function stopHeartbeat()
-    {
-        if(heartbeat === null)
-            return
-        clearInterval(heartbeat)
-        heartbeat = null
+        heartbeatTimer.unref?.()
     }
 
     return {
         registry,
         async start()
         {
-            if(server.listening)
-                return this.address()
-            stopping = false
-            await new Promise((resolve, reject) =>
+            if(startPromise !== null)
+                return startPromise
+            if(stopping)
+                throw new Error('server is stopping')
+
+            startPromise = new Promise((resolve, reject) =>
             {
                 const onError = (error) =>
                 {
                     server.off('listening', onListening)
+                    startPromise = null
                     reject(error)
                 }
                 const onListening = () =>
                 {
                     server.off('error', onError)
+                    startHeartbeat()
                     resolve()
                 }
                 server.once('error', onError)
                 server.once('listening', onListening)
                 server.listen(port, host)
             })
-            startHeartbeat()
-            return this.address()
-        },
-        async stop()
-        {
-            if(stopping)
-                return
-            stopping = true
-            stopHeartbeat()
-            await registry.stop()
-            for(const socket of webSockets.clients)
-                socket.terminate()
-            await new Promise((resolve, reject) =>
-            {
-                if(!server.listening)
-                {
-                    resolve()
-                    return
-                }
-                server.close((error) => error ? reject(error) : resolve())
-            })
+            return startPromise
         },
         address()
         {
             const address = server.address()
             if(address === null || typeof address === 'string')
-                return null
+                throw new Error('server is not listening on a TCP address')
             return address
+        },
+        async stop()
+        {
+            if(stopPromise !== null)
+                return stopPromise
+            stopping = true
+            stopPromise = (async () =>
+            {
+                if(heartbeatTimer !== null)
+                {
+                    clearInterval(heartbeatTimer)
+                    heartbeatTimer = null
+                }
+                await registry.stop()
+                await new Promise((resolve) => webSocketServer.close(() => resolve()))
+                if(server.listening)
+                {
+                    await new Promise((resolve, reject) =>
+                    {
+                        server.close((error) => error ? reject(error) : resolve())
+                    })
+                }
+            })()
+            return stopPromise
         },
     }
 }
