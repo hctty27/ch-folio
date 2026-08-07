@@ -22,6 +22,7 @@ import {
 } from '@ch-folio/authoritative-physics'
 
 const DEFAULT_TICKS = 36_000
+const DEFAULT_SLOW_TICK_THRESHOLD_MS = 5
 const SAMPLE_INTERVAL_TICKS = 3
 const HASH_INTERVAL_TICKS = 60
 const SAFE_INPUT = Object.freeze({
@@ -202,10 +203,24 @@ function recordRapierInternalTimings(world, samples)
     }
 }
 
-export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
+function validateSlowTickThreshold(value)
+{
+    if(!Number.isFinite(value) || value < 0)
+        throw new TypeError('slowTickThresholdMs must be a finite non-negative number')
+    return Number(value)
+}
+
+export async function runLocalBenchmark({
+    ticks = DEFAULT_TICKS,
+    diagnostics = false,
+    slowTickThresholdMs = DEFAULT_SLOW_TICK_THRESHOLD_MS,
+} = {})
 {
     if(!Number.isSafeInteger(ticks) || ticks < 1)
         throw new TypeError('ticks must be a positive safe integer')
+    if(typeof diagnostics !== 'boolean')
+        throw new TypeError('diagnostics must be a boolean')
+    const diagnosticThreshold = validateSlowTickThreshold(slowTickThresholdMs)
 
     const normalized = validateScenarioFixture(pileupFixture)
     const inputsByFixtureTick = groupInputs(normalized)
@@ -213,6 +228,7 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
     const primary = createWorld(RAPIER, normalized)
     const shadow = createWorld(RAPIER, normalized)
     const samples = new Map()
+    const slowTicks = []
     let checksumMismatches = 0
     let hashMismatches = 0
     let peakRssBytes = readRssBytes()
@@ -302,7 +318,19 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
                 record(samples, 'snapshot', performance.now() - snapshotStarted)
             }
 
-            record(samples, 'totalTick', performance.now() - tickStarted)
+            const tickEnded = performance.now()
+            const totalTickMs = tickEnded - tickStarted
+            record(samples, 'totalTick', totalTickMs)
+            if(diagnostics && totalTickMs >= diagnosticThreshold)
+            {
+                slowTicks.push({
+                    tick,
+                    fixtureTick,
+                    startTimeMs: tickStarted,
+                    endTimeMs: tickEnded,
+                    totalMs: totalTickMs,
+                })
+            }
 
             const shadowAdvanced = shadow.world.step()
             if(shadowAdvanced !== tick)
@@ -373,19 +401,35 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
             peakRssBytes,
         },
     }
+    if(diagnostics)
+    {
+        report.diagnostics = {
+            slowTickThresholdMs: diagnosticThreshold,
+            slowTicks,
+        }
+    }
     report.gates = evaluateBenchmarkGates(report)
     return report
 }
 
 function parseCli(argv)
 {
-    const options = { ticks: DEFAULT_TICKS, output: null }
+    const options = {
+        ticks: DEFAULT_TICKS,
+        output: null,
+        diagnostics: false,
+        slowTickThresholdMs: DEFAULT_SLOW_TICK_THRESHOLD_MS,
+    }
     for(const argument of argv)
     {
         if(argument.startsWith('--ticks='))
             options.ticks = Number(argument.slice('--ticks='.length))
         else if(argument.startsWith('--output='))
             options.output = argument.slice('--output='.length)
+        else if(argument === '--diagnostics')
+            options.diagnostics = true
+        else if(argument.startsWith('--slow-tick-threshold-ms='))
+            options.slowTickThresholdMs = Number(argument.slice('--slow-tick-threshold-ms='.length))
         else
             throw new Error(`unknown benchmark argument ${argument}`)
     }
@@ -397,7 +441,11 @@ async function main()
     try
     {
         const options = parseCli(process.argv.slice(2))
-        const report = await runLocalBenchmark({ ticks: options.ticks })
+        const report = await runLocalBenchmark({
+            ticks: options.ticks,
+            diagnostics: options.diagnostics,
+            slowTickThresholdMs: options.slowTickThresholdMs,
+        })
         const json = `${JSON.stringify(report, null, 2)}\n`
         if(options.output)
             await writeFile(options.output, json)
