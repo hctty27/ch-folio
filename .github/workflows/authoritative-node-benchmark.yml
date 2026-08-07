@@ -1,14 +1,18 @@
 name: Node Authoritative Benchmark Evidence
 
 on:
+  pull_request:
+    branches:
+      - feat/authoritative-physics-foundation
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: node-authoritative-benchmark-${{ github.ref }}
-  cancel-in-progress: true
+  group: hk-server-exclusive
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   benchmark:
@@ -17,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
