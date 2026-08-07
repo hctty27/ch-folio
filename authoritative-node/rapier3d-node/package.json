@@ -1,0 +1,11 @@
+{
+  "name": "@dimforge/rapier3d",
+  "version": "0.17.3-node.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "exports": "./index.js",
+  "dependencies": {
+    "@dimforge/rapier3d-deterministic": "0.17.3"
+  }
+}

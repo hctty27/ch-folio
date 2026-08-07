@@ -1,0 +1,153 @@
+name: Node Authoritative Named Staging Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hk-server-named-staging-acceptance
+  cancel-in-progress: false
+
+env:
+  STAGING_HOSTNAME: hk-test.testnb.me
+
+jobs:
+  acceptance:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate existing staging Tunnel path
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${STAGING_HOSTNAME}" != "hk-test.testnb.me" ]]; then
+            echo "staging hostname must remain hk-test.testnb.me" >&2
+            exit 1
+          fi
+          if ss -H -ltn '( sport = :8080 )' | grep -q .; then
+            echo "host port 8080 is already occupied; refusing to disturb an existing service" >&2
+            exit 1
+          fi
+          if ! pgrep -x cloudflared >/dev/null 2>&1; then
+            echo "existing cloudflared process is required on hk-server" >&2
+            exit 1
+          fi
+          echo "staging_hostname=${STAGING_HOSTNAME}"
+      - name: Install clean Node dependencies
+        run: |
+          npm ci
+          npm ci --prefix authoritative-node --ignore-scripts
+      - name: Run public existing-Tunnel smoke and 600-second load gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BENCHMARK_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::${BENCHMARK_TOKEN}"
+
+          SERVICE_LOG="${RUNNER_TEMP}/authoritative-node-named-staging.log"
+
+          HOST=0.0.0.0 \
+          PORT=8080 \
+          AUTHORITATIVE_BENCHMARK_TOKEN="${BENCHMARK_TOKEN}" \
+          node authoritative-node/src/index.js >"${SERVICE_LOG}" 2>&1 &
+          SERVER_PID=$!
+
+          cleanup() {
+            kill "${SERVER_PID}" 2>/dev/null || true
+            wait "${SERVER_PID}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          loopback_ready=0
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+              loopback_ready=1
+              break
+            fi
+            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+              echo "Node authority exited before loopback healthz became ready" >&2
+              cat "${SERVICE_LOG}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if [[ "${loopback_ready}" -ne 1 ]]; then
+            echo "Node authority did not become healthy after production warmup" >&2
+            cat "${SERVICE_LOG}" >&2
+            exit 1
+          fi
+
+          bridge_ready=0
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://172.18.0.1:8080/healthz >/dev/null 2>&1; then
+              bridge_ready=1
+              break
+            fi
+            sleep 0.25
+          done
+          if [[ "${bridge_ready}" -ne 1 ]]; then
+            echo "Node authority is not reachable through Docker bridge gateway 172.18.0.1:8080" >&2
+            cat "${SERVICE_LOG}" >&2
+            exit 1
+          fi
+
+          public_ready=0
+          for attempt in $(seq 1 240); do
+            if curl --fail --silent --show-error "https://${STAGING_HOSTNAME}/healthz" >/dev/null 2>&1; then
+              public_ready=1
+              break
+            fi
+            sleep 0.5
+          done
+          if [[ "${public_ready}" -ne 1 ]]; then
+            echo "existing staging Tunnel did not expose Node healthz" >&2
+            cat "${SERVICE_LOG}" >&2
+            exit 1
+          fi
+
+          WSS_URL="wss://${STAGING_HOSTNAME}/ws"
+          AUTHORITATIVE_BENCHMARK_TOKEN="${BENCHMARK_TOKEN}" \
+            npm run smoke:authoritative-node-staging -- \
+              --url="${WSS_URL}" \
+              --room=named-staging-smoke \
+            | tee authoritative-node-named-staging-smoke.json
+
+          AUTHORITATIVE_BENCHMARK_TOKEN="${BENCHMARK_TOKEN}" \
+          AUTHORITATIVE_BENCHMARK_COMMIT="$(git rev-parse HEAD)" \
+            node scripts/loadtest-authoritative-node.mjs \
+              --url="${WSS_URL}" \
+              --room=named-staging-600s \
+              --clients=8 \
+              --seconds=600 \
+            | tee authoritative-node-named-staging-loadtest.json
+
+          kill -0 "${SERVER_PID}"
+          pgrep -x cloudflared >/dev/null
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "hostname=${STAGING_HOSTNAME}"
+            echo "origin_bind=0.0.0.0:8080"
+            echo "docker_bridge_origin=http://172.18.0.1:8080"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "server_pid_alive=yes"
+            echo "existing_cloudflared_alive=yes"
+          } > authoritative-node-named-staging-identity.txt
+      - name: Upload named staging acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-authoritative-named-staging-acceptance
+          path: |
+            authoritative-node-named-staging-smoke.json
+            authoritative-node-named-staging-loadtest.json
+            authoritative-node-named-staging-identity.txt
+          if-no-files-found: error
+          retention-days: 30

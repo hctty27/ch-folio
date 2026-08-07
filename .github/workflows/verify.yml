@@ -4,13 +4,18 @@ on:
   push:
     branches:
       - main
-      - 'feat/**'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feat/authoritative-physics-foundation
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: hk-server-exclusive
+  cancel-in-progress: true
 
 jobs:
   test-and-build:
@@ -25,6 +30,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Purge stale Rapier test sandboxes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEMP_ROOT="${TMPDIR:-/tmp}"
+          find "${TEMP_ROOT}" -maxdepth 1 -type d -name 'ch-folio-rapier-*' -user "$(id -un)" -exec rm -rf -- {} +
+          df -h "${TEMP_ROOT}"
       - run: npm ci
       - run: node --test packages/authoritative-physics/test/*.test.mjs
       - name: Reject deterministic expectation updates in CI
@@ -36,7 +48,116 @@ jobs:
       - run: python -m pip install numpy trimesh
       - run: npm test
       - run: npm run build
+      - run: npm ci --prefix authoritative-node --ignore-scripts
+      - run: npm test --prefix authoritative-node
       - run: npm install --prefix multiplayer-worker --ignore-scripts
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
       - run: cd multiplayer-worker && npx wrangler deploy --dry-run
+      - name: Record staging benchmark identity
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        shell: bash
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "production_warmup_ticks=600"
+          } > authoritative-node-benchmark-identity.txt
+      - name: Run staging production-warmed 36000-tick hard gate
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        id: staging_benchmark
+        shell: bash
+        run: |
+          set +e
+          node scripts/benchmark-authoritative-node.mjs \
+            --output=authoritative-node-local-benchmark.json
+          status=$?
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Capture failed-gate scheduler evidence
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging' && steps.staging_benchmark.outputs.status != '0'
+        shell: bash
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "nproc=$(nproc)"
+            echo "production_warmup_ticks=600"
+            echo "=== uptime ==="
+            uptime
+            echo "=== cpu pressure ==="
+            cat /proc/pressure/cpu 2>/dev/null || true
+            echo "=== runnable processes ==="
+            ps -eo pid,ppid,psr,pcpu,pmem,stat,comm,args --sort=-pcpu | head -n 40 || true
+          } > authoritative-node-benchmark-scheduler.txt
+
+          set +e
+          node scripts/benchmark-authoritative-node.mjs \
+            --diagnostics \
+            --slow-tick-threshold-ms=5 \
+            --output=authoritative-node-local-benchmark-diagnostic.json
+          diagnostic_status=$?
+          echo "diagnostic_exit_status=${diagnostic_status}" >> authoritative-node-benchmark-scheduler.txt
+          exit 0
+      - name: Upload staging benchmark evidence
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-authoritative-local-benchmark
+          path: |
+            authoritative-node-local-benchmark.json
+            authoritative-node-local-benchmark-diagnostic.json
+            authoritative-node-benchmark-identity.txt
+            authoritative-node-benchmark-scheduler.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce staging benchmark hard gate
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        shell: bash
+        run: exit "${{ steps.staging_benchmark.outputs.status }}"
+      - name: Smoke real staging Node startup on loopback
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::${TOKEN}"
+          SERVICE_LOG="${RUNNER_TEMP}/authoritative-node-loopback.log"
+
+          HOST=127.0.0.1 \
+          PORT=8080 \
+          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
+          node authoritative-node/src/index.js >"${SERVICE_LOG}" 2>&1 &
+          SERVER_PID=$!
+
+          cleanup() {
+            kill "${SERVER_PID}" 2>/dev/null || true
+            wait "${SERVER_PID}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+              echo "Node authority exited before healthz became ready" >&2
+              cat "${SERVICE_LOG}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+
+          if [[ "${ready}" -ne 1 ]]; then
+            echo "Node authority did not become healthy after production warmup" >&2
+            cat "${SERVICE_LOG}" >&2
+            exit 1
+          fi
+
+          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
+            npm run smoke:authoritative-node-staging -- \
+              --url=ws://127.0.0.1:8080/ws \
+              --room=ci-staging-smoke

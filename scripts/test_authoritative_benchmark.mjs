@@ -64,7 +64,51 @@ test('small local run emits deterministic machine-readable benchmark metadata', 
     assert.equal(report.gauges.maxQueueDepth, 0)
     assert.equal(report.disconnects, 0)
     assert.equal(report.phases.totalTick.count, 120)
+    assert.equal('diagnostics' in report, false)
     assert.equal(typeof JSON.parse(JSON.stringify(report)).gates.pass, 'boolean')
+})
+
+test('diagnostic local run reports phase, GC, CPU, memory, and context-switch evidence without changing gates', async () =>
+{
+    const report = await runLocalBenchmark({
+        ticks: 120,
+        diagnostics: true,
+        slowTickThresholdMs: 0,
+    })
+
+    assert.equal(report.diagnostics.slowTickThresholdMs, 0)
+    assert.equal(report.diagnostics.slowTicks.length, 120)
+    const first = report.diagnostics.slowTicks[0]
+    assert.equal(first.tick, 1)
+    assert.equal(first.fixtureTick, 1)
+    assert.equal(Number.isFinite(first.startTimeMs), true)
+    assert.equal(Number.isFinite(first.endTimeMs), true)
+    assert.equal(Number.isFinite(first.totalMs), true)
+    assert.equal(Number.isFinite(first.cpuUserMs), true)
+    assert.equal(Number.isFinite(first.cpuSystemMs), true)
+    assert.equal(Number.isFinite(first.cpuTotalMs), true)
+    assert.equal(Number.isSafeInteger(first.voluntaryContextSwitchesDelta), true)
+    assert.equal(Number.isSafeInteger(first.involuntaryContextSwitchesDelta), true)
+    assert.equal(typeof first.phaseDurationsMs, 'object')
+    assert.equal(Number.isFinite(first.phaseDurationsMs.rapierStep), true)
+    assert.equal(Number.isFinite(first.phaseDurationsMs.controllerUpdate), true)
+    assert.equal(Array.isArray(first.gcEvents), true)
+    assert.equal(Number.isSafeInteger(first.memoryAfter.heapUsedBytes), true)
+    assert.equal(Number.isSafeInteger(first.memoryAfter.externalBytes), true)
+    assert.equal(Number.isSafeInteger(first.memoryAfter.arrayBuffersBytes), true)
+    assert.ok(first.endTimeMs >= first.startTimeMs)
+    assert.ok(first.totalMs >= 0)
+    assert.ok(first.cpuUserMs >= 0)
+    assert.ok(first.cpuSystemMs >= 0)
+    assert.equal(first.cpuTotalMs, first.cpuUserMs + first.cpuSystemMs)
+    assert.ok(first.voluntaryContextSwitchesDelta >= 0)
+    assert.ok(first.involuntaryContextSwitchesDelta >= 0)
+    assert.ok(first.phaseDurationsMs.rapierStep >= 0)
+    assert.ok(first.phaseDurationsMs.controllerUpdate >= 0)
+    assert.ok(first.memoryAfter.heapUsedBytes >= 0)
+    assert.ok(first.memoryAfter.externalBytes >= 0)
+    assert.ok(first.memoryAfter.arrayBuffersBytes >= 0)
+    assert.equal(report.gates.pass, evaluateBenchmarkGates(report).pass)
 })
 
 test('deployed load options keep credentials out of the URL and report metadata', () =>

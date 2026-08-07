@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -78,15 +78,27 @@ async function patchJavaScriptTree(directory)
     }
 }
 
-export async function loadRapierForNode()
+export async function loadRapierForNode({
+    temporaryParent = tmpdir(),
+    onTemporaryRoot = null,
+} = {})
 {
-    const sourceRoot = fileURLToPath(new URL('../../../node_modules/@dimforge/rapier3d/', import.meta.url))
-    const temporaryRoot = await mkdtemp(join(tmpdir(), 'ch-folio-rapier-'))
-    await cp(sourceRoot, temporaryRoot, { recursive: true })
-    await writeFile(join(temporaryRoot, 'package.json'), '{"type":"module"}\n')
-    await patchJavaScriptTree(temporaryRoot)
+    if(typeof temporaryParent !== 'string' || temporaryParent.length === 0)
+        throw new TypeError('temporaryParent must be a non-empty path')
+    if(onTemporaryRoot !== null && typeof onTemporaryRoot !== 'function')
+        throw new TypeError('onTemporaryRoot must be a function when provided')
 
-    const loader = `import { readFileSync } from 'node:fs'
+    const sourceRoot = fileURLToPath(new URL('../../../node_modules/@dimforge/rapier3d/', import.meta.url))
+    const temporaryRoot = await mkdtemp(join(temporaryParent, 'ch-folio-rapier-'))
+    onTemporaryRoot?.(temporaryRoot)
+
+    try
+    {
+        await cp(sourceRoot, temporaryRoot, { recursive: true })
+        await writeFile(join(temporaryRoot, 'package.json'), '{"type":"module"}\n')
+        await patchJavaScriptTree(temporaryRoot)
+
+        const loader = `import { readFileSync } from 'node:fs'
 import * as imports from './rapier_wasm3d_bg.js'
 
 const bytes = readFileSync(new URL('./rapier_wasm3d_bg.wasm', import.meta.url))
@@ -98,8 +110,18 @@ imports.__wbg_set_wasm(instance.exports)
 
 export * from './rapier_wasm3d_bg.js'
 `
-    await writeFile(join(temporaryRoot, 'rapier_wasm3d.js'), loader)
+        await writeFile(join(temporaryRoot, 'rapier_wasm3d.js'), loader)
 
-    const module = await import(pathToFileURL(join(temporaryRoot, 'rapier.js')).href)
-    return module.default
+        const module = await import(pathToFileURL(join(temporaryRoot, 'rapier.js')).href)
+        return module.default
+    }
+    finally
+    {
+        await rm(temporaryRoot, {
+            recursive: true,
+            force: true,
+            maxRetries: 3,
+            retryDelay: 50,
+        })
+    }
 }
