@@ -67,6 +67,30 @@ jobs:
           status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           exit 0
+      - name: Capture failed-gate scheduler evidence
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging' && steps.staging_benchmark.outputs.status != '0'
+        shell: bash
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "nproc=$(nproc)"
+            echo "=== uptime ==="
+            uptime
+            echo "=== cpu pressure ==="
+            cat /proc/pressure/cpu 2>/dev/null || true
+            echo "=== runnable processes ==="
+            ps -eo pid,ppid,psr,pcpu,pmem,stat,comm,args --sort=-pcpu | head -n 40 || true
+          } > authoritative-node-benchmark-scheduler.txt
+
+          set +e
+          npm run benchmark:authoritative:local -- \
+            --diagnostics \
+            --slow-tick-threshold-ms=5 \
+            --output=authoritative-node-local-benchmark-diagnostic.json
+          diagnostic_status=$?
+          echo "diagnostic_exit_status=${diagnostic_status}" >> authoritative-node-benchmark-scheduler.txt
+          exit 0
       - name: Upload staging benchmark evidence
         if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
         uses: actions/upload-artifact@v4
@@ -74,7 +98,9 @@ jobs:
           name: node-authoritative-local-benchmark
           path: |
             authoritative-node-local-benchmark.json
+            authoritative-node-local-benchmark-diagnostic.json
             authoritative-node-benchmark-identity.txt
+            authoritative-node-benchmark-scheduler.txt
           if-no-files-found: error
           retention-days: 30
       - name: Enforce staging benchmark hard gate
