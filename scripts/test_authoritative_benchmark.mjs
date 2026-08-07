@@ -68,7 +68,7 @@ test('small local run emits deterministic machine-readable benchmark metadata', 
     assert.equal(typeof JSON.parse(JSON.stringify(report)).gates.pass, 'boolean')
 })
 
-test('diagnostic local run reports bounded slow-tick time windows without changing gate semantics', async () =>
+test('diagnostic local run reports wall time, CPU time, and context-switch deltas without changing gates', async () =>
 {
     const report = await runLocalBenchmark({
         ticks: 120,
@@ -78,13 +78,24 @@ test('diagnostic local run reports bounded slow-tick time windows without changi
 
     assert.equal(report.diagnostics.slowTickThresholdMs, 0)
     assert.equal(report.diagnostics.slowTicks.length, 120)
-    assert.equal(report.diagnostics.slowTicks[0].tick, 1)
-    assert.equal(report.diagnostics.slowTicks[0].fixtureTick, 1)
-    assert.equal(Number.isFinite(report.diagnostics.slowTicks[0].startTimeMs), true)
-    assert.equal(Number.isFinite(report.diagnostics.slowTicks[0].endTimeMs), true)
-    assert.equal(Number.isFinite(report.diagnostics.slowTicks[0].totalMs), true)
-    assert.ok(report.diagnostics.slowTicks[0].endTimeMs >= report.diagnostics.slowTicks[0].startTimeMs)
-    assert.equal(report.diagnostics.slowTicks[0].totalMs >= 0, true)
+    const first = report.diagnostics.slowTicks[0]
+    assert.equal(first.tick, 1)
+    assert.equal(first.fixtureTick, 1)
+    assert.equal(Number.isFinite(first.startTimeMs), true)
+    assert.equal(Number.isFinite(first.endTimeMs), true)
+    assert.equal(Number.isFinite(first.totalMs), true)
+    assert.equal(Number.isFinite(first.cpuUserMs), true)
+    assert.equal(Number.isFinite(first.cpuSystemMs), true)
+    assert.equal(Number.isFinite(first.cpuTotalMs), true)
+    assert.equal(Number.isSafeInteger(first.voluntaryContextSwitchesDelta), true)
+    assert.equal(Number.isSafeInteger(first.involuntaryContextSwitchesDelta), true)
+    assert.ok(first.endTimeMs >= first.startTimeMs)
+    assert.ok(first.totalMs >= 0)
+    assert.ok(first.cpuUserMs >= 0)
+    assert.ok(first.cpuSystemMs >= 0)
+    assert.equal(first.cpuTotalMs, first.cpuUserMs + first.cpuSystemMs)
+    assert.ok(first.voluntaryContextSwitchesDelta >= 0)
+    assert.ok(first.involuntaryContextSwitchesDelta >= 0)
     assert.equal(report.gates.pass, evaluateBenchmarkGates(report).pass)
 })
 
