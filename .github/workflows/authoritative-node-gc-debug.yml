@@ -1,16 +1,10 @@
 name: Node Benchmark GC Debug
 
 on:
-  pull_request:
-    branches:
-      - feat/authoritative-physics-foundation
+  workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: node-authoritative-gc-debug-${{ github.event.pull_request.head.ref }}
-  cancel-in-progress: true
 
 jobs:
   diagnose:
@@ -19,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
