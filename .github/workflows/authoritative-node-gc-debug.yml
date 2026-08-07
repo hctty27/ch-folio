@@ -1,4 +1,4 @@
-name: Node Benchmark Scheduler Debug
+name: Node Benchmark Warmup Debug
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: node-authoritative-scheduler-debug-${{ github.event.pull_request.head.ref }}
+  group: node-authoritative-warmup-debug-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Record scheduler environment
+      - name: Record warmup environment
         shell: bash
         run: |
           {
@@ -33,67 +33,63 @@ jobs:
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
             echo "nproc=$(nproc)"
-            echo "taskset=$(command -v taskset || true)"
-            echo "vmstat=$(command -v vmstat || true)"
-            echo "=== uname ==="
-            uname -a
             echo "=== uptime ==="
             uptime
-            echo "=== lscpu ==="
-            lscpu
-            echo "=== memory ==="
-            free -m || true
             echo "=== cpu pressure ==="
             cat /proc/pressure/cpu 2>/dev/null || true
-          } > authoritative-node-scheduler-environment.txt
-      - name: Compare baseline and CPU-pinned 36000-tick diagnostics
+          } > authoritative-node-warmup-environment.txt
+      - name: Run 6000-tick process warmup then measured 36000 ticks
         id: diagnostic
         shell: bash
         run: |
           set +e
           if command -v vmstat >/dev/null 2>&1; then
-            vmstat 1 > authoritative-node-vmstat.log &
+            vmstat 1 > authoritative-node-warmup-vmstat.log &
             VMSTAT_PID=$!
           else
             VMSTAT_PID=""
-            : > authoritative-node-vmstat.log
+            : > authoritative-node-warmup-vmstat.log
           fi
           trap 'if [ -n "$VMSTAT_PID" ]; then kill "$VMSTAT_PID" 2>/dev/null || true; fi' EXIT
 
-          node scripts/benchmark-authoritative-room.mjs \
-            --diagnostics \
-            --slow-tick-threshold-ms=5 \
-            --output=authoritative-node-baseline-diagnostic.json \
-            > authoritative-node-baseline.log 2>&1
-          baseline_status=$?
+          node --input-type=module > authoritative-node-warmup.log 2>&1 <<'NODE'
+          import { writeFile } from 'node:fs/promises'
+          import { runLocalBenchmark } from './scripts/benchmark-authoritative-room.mjs'
 
-          sleep 2
-
-          taskset -c 1 node scripts/benchmark-authoritative-room.mjs \
-            --diagnostics \
-            --slow-tick-threshold-ms=5 \
-            --output=authoritative-node-pinned-diagnostic.json \
-            > authoritative-node-pinned.log 2>&1
-          pinned_status=$?
-
-          echo "baseline_status=${baseline_status}" >> "$GITHUB_OUTPUT"
-          echo "pinned_status=${pinned_status}" >> "$GITHUB_OUTPUT"
+          const warmupTicks = 6_000
+          const warmup = await runLocalBenchmark({ ticks: warmupTicks })
+          const report = await runLocalBenchmark({
+              ticks: 36_000,
+              diagnostics: true,
+              slowTickThresholdMs: 5,
+          })
+          report.diagnostics.processWarmupTicks = warmupTicks
+          report.diagnostics.warmupGate = warmup.gates
+          await writeFile(
+              'authoritative-node-warmed-diagnostic.json',
+              `${JSON.stringify(report, null, 2)}\n`,
+          )
+          process.stdout.write(`${JSON.stringify({
+              warmup: warmup.phases.totalTick,
+              measured: report.phases.totalTick,
+              gates: report.gates,
+          }, null, 2)}\n`)
+          process.exitCode = report.gates.pass ? 0 : 1
+          NODE
+          status=$?
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Upload scheduler diagnostic evidence
+      - name: Upload warmup diagnostic evidence
         uses: actions/upload-artifact@v4
         with:
-          name: node-authoritative-scheduler-debug
+          name: node-authoritative-warmup-debug
           path: |
-            authoritative-node-baseline-diagnostic.json
-            authoritative-node-pinned-diagnostic.json
-            authoritative-node-baseline.log
-            authoritative-node-pinned.log
-            authoritative-node-vmstat.log
-            authoritative-node-scheduler-environment.txt
+            authoritative-node-warmed-diagnostic.json
+            authoritative-node-warmup.log
+            authoritative-node-warmup-vmstat.log
+            authoritative-node-warmup-environment.txt
           if-no-files-found: error
           retention-days: 7
       - name: Record diagnostic gate status
         shell: bash
-        run: |
-          echo "baseline_exit_status=${{ steps.diagnostic.outputs.baseline_status }}"
-          echo "pinned_exit_status=${{ steps.diagnostic.outputs.pinned_status }}"
+        run: echo "warmed_benchmark_exit_status=${{ steps.diagnostic.outputs.status }}"
