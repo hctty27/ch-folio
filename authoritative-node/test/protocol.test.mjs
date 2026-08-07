@@ -216,6 +216,23 @@ test('one room accepts eight sessions and rejects a ninth without affecting anot
     assert.equal(service.registry.size, 2)
 })
 
+test('current-controller disconnect records exactly one benchmark disconnect', async (t) =>
+{
+    const service = await createTestServer(t)
+    const { port } = service.address()
+    const client = await openClient(port, 'disconnect-metrics')
+    await hello(client)
+    const room = service.registry.get('disconnect-metrics')
+
+    client.socket.close(1000, 'disconnect')
+    await withTimeout(new Promise((resolve) => client.socket.once('close', resolve)), 'metrics close')
+    await room.flushMessages()
+
+    assert.equal(room.metrics.readBenchmarkSummary().disconnects, 1)
+    room.handleClose(client.socket)
+    assert.equal(room.metrics.readBenchmarkSummary().disconnects, 1)
+})
+
 test('resume rotates credentials before expiry and the room disappears at tick 180', async (t) =>
 {
     const service = await createTestServer(t)
