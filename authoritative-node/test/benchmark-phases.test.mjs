@@ -21,9 +21,19 @@ const REQUIRED_PHASES = [
     'stateSocketSendCallTotal',
     'stateSocketSendCallMax',
     'stateSocketSendLoopOverhead',
+    'stateBroadcastUnaccounted',
 ]
 
-test('benchmark room records wall and CPU timing for simulation and state broadcast subphases', async () =>
+const REQUIRED_DIAGNOSTICS = [
+    'totalTickCpuMs',
+    'totalTickVoluntaryContextSwitches',
+    'totalTickInvoluntaryContextSwitches',
+    'stateBroadcastCpuMs',
+    'stateBroadcastVoluntaryContextSwitches',
+    'stateBroadcastInvoluntaryContextSwitches',
+]
+
+test('benchmark room records wall, CPU, send-call, and scheduling diagnostics', async () =>
 {
     const room = new BenchmarkNodeAuthoritativeRoom({
         room: 'benchmark-subphases',
@@ -73,6 +83,33 @@ test('benchmark room records wall and CPU timing for simulation and state broadc
             assert.ok(summary.phases[phase].maxMs >= 0, `${phase} non-negative`)
         }
 
+        for(const slowTick of summary.slowTicks)
+        {
+            for(const diagnostic of REQUIRED_DIAGNOSTICS)
+            {
+                assert.ok(
+                    Number.isFinite(slowTick.diagnostics[diagnostic]),
+                    `${diagnostic} finite on tick ${slowTick.tick}`,
+                )
+                assert.ok(
+                    slowTick.diagnostics[diagnostic] >= 0,
+                    `${diagnostic} non-negative on tick ${slowTick.tick}`,
+                )
+            }
+            assert.ok(Number.isSafeInteger(
+                slowTick.diagnostics.totalTickVoluntaryContextSwitches,
+            ))
+            assert.ok(Number.isSafeInteger(
+                slowTick.diagnostics.totalTickInvoluntaryContextSwitches,
+            ))
+            assert.ok(Number.isSafeInteger(
+                slowTick.diagnostics.stateBroadcastVoluntaryContextSwitches,
+            ))
+            assert.ok(Number.isSafeInteger(
+                slowTick.diagnostics.stateBroadcastInvoluntaryContextSwitches,
+            ))
+        }
+
         assert.ok(
             summary.phases.simulationAdvance.totalMs
             >= summary.phases.rapierStep.totalMs,
@@ -92,6 +129,10 @@ test('benchmark room records wall and CPU timing for simulation and state broadc
         assert.ok(
             summary.phases.stateSocketSendCallTotal.totalMs
             >= summary.phases.stateSocketSendCallMax.totalMs,
+        )
+        assert.ok(
+            summary.phases.stateBroadcast.totalMs
+            >= summary.phases.stateBroadcastUnaccounted.totalMs,
         )
     }
     finally
