@@ -1,0 +1,172 @@
+name: Node Authoritative Named Staging Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hk-server-exclusive
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate named staging bootstrap
+        shell: bash
+        env:
+          STAGING_HOSTNAME: ${{ vars.AUTHORITATIVE_STAGING_HOSTNAME }}
+          TUNNEL_TOKEN: ${{ secrets.AUTHORITATIVE_STAGING_TUNNEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${STAGING_HOSTNAME}" ]]; then
+            echo "Repository variable AUTHORITATIVE_STAGING_HOSTNAME is required" >&2
+            exit 1
+          fi
+          if [[ ! "${STAGING_HOSTNAME}" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || [[ "${STAGING_HOSTNAME}" != *.* ]]; then
+            echo "AUTHORITATIVE_STAGING_HOSTNAME must be a DNS hostname" >&2
+            exit 1
+          fi
+          if [[ -z "${TUNNEL_TOKEN}" ]]; then
+            echo "Repository secret AUTHORITATIVE_STAGING_TUNNEL_TOKEN is required" >&2
+            exit 1
+          fi
+          echo "::add-mask::${TUNNEL_TOKEN}"
+          echo "staging_hostname=${STAGING_HOSTNAME}"
+      - name: Install clean Node dependencies
+        run: |
+          npm ci
+          npm ci --prefix authoritative-node --ignore-scripts
+      - name: Download user-local cloudflared
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(uname -m)" != "x86_64" ]]; then
+            echo "named staging acceptance currently requires x86_64" >&2
+            exit 1
+          fi
+          CLOUDFLARED="${RUNNER_TEMP}/cloudflared"
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+            --output "${CLOUDFLARED}"
+          chmod 0700 "${CLOUDFLARED}"
+          "${CLOUDFLARED}" version | tee authoritative-node-cloudflared-version.txt
+      - name: Run public named-Tunnel smoke and 600-second load gate
+        shell: bash
+        env:
+          STAGING_HOSTNAME: ${{ vars.AUTHORITATIVE_STAGING_HOSTNAME }}
+          TUNNEL_TOKEN: ${{ secrets.AUTHORITATIVE_STAGING_TUNNEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          BENCHMARK_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::${BENCHMARK_TOKEN}"
+          echo "::add-mask::${TUNNEL_TOKEN}"
+
+          SERVICE_LOG="${RUNNER_TEMP}/authoritative-node-named-staging.log"
+          TUNNEL_LOG="${RUNNER_TEMP}/cloudflared-named-staging.log"
+          CLOUDFLARED="${RUNNER_TEMP}/cloudflared"
+
+          HOST=127.0.0.1 \
+          PORT=8080 \
+          AUTHORITATIVE_BENCHMARK_TOKEN="${BENCHMARK_TOKEN}" \
+          node authoritative-node/src/index.js >"${SERVICE_LOG}" 2>&1 &
+          SERVER_PID=$!
+          TUNNEL_PID=""
+
+          cleanup() {
+            if [[ -n "${TUNNEL_PID}" ]]; then
+              kill "${TUNNEL_PID}" 2>/dev/null || true
+              wait "${TUNNEL_PID}" 2>/dev/null || true
+            fi
+            kill "${SERVER_PID}" 2>/dev/null || true
+            wait "${SERVER_PID}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          loopback_ready=0
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+              loopback_ready=1
+              break
+            fi
+            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+              echo "Node authority exited before loopback healthz became ready" >&2
+              cat "${SERVICE_LOG}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if [[ "${loopback_ready}" -ne 1 ]]; then
+            echo "Node authority did not become healthy after production warmup" >&2
+            cat "${SERVICE_LOG}" >&2
+            exit 1
+          fi
+
+          "${CLOUDFLARED}" tunnel --loglevel info run --token "${TUNNEL_TOKEN}" \
+            >"${TUNNEL_LOG}" 2>&1 &
+          TUNNEL_PID=$!
+
+          public_ready=0
+          for attempt in $(seq 1 240); do
+            if curl --fail --silent --show-error "https://${STAGING_HOSTNAME}/healthz" >/dev/null 2>&1; then
+              public_ready=1
+              break
+            fi
+            if ! kill -0 "${TUNNEL_PID}" 2>/dev/null; then
+              echo "named cloudflared process exited before public healthz became ready" >&2
+              cat "${TUNNEL_LOG}" >&2
+              exit 1
+            fi
+            sleep 0.5
+          done
+          if [[ "${public_ready}" -ne 1 ]]; then
+            echo "named staging hostname did not become healthy" >&2
+            cat "${TUNNEL_LOG}" >&2
+            exit 1
+          fi
+
+          WSS_URL="wss://${STAGING_HOSTNAME}/ws"
+          AUTHORITATIVE_BENCHMARK_TOKEN="${BENCHMARK_TOKEN}" \
+            npm run smoke:authoritative-node-staging -- \
+              --url="${WSS_URL}" \
+              --room=named-staging-smoke \
+            | tee authoritative-node-named-staging-smoke.json
+
+          AUTHORITATIVE_BENCHMARK_TOKEN="${BENCHMARK_TOKEN}" \
+          AUTHORITATIVE_BENCHMARK_COMMIT="$(git rev-parse HEAD)" \
+            node scripts/loadtest-authoritative-node.mjs \
+              --url="${WSS_URL}" \
+              --room=named-staging-600s \
+              --clients=8 \
+              --seconds=600 \
+            | tee authoritative-node-named-staging-loadtest.json
+
+          kill -0 "${SERVER_PID}"
+          kill -0 "${TUNNEL_PID}"
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "hostname=${STAGING_HOSTNAME}"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "server_pid_alive=yes"
+            echo "tunnel_pid_alive=yes"
+          } > authoritative-node-named-staging-identity.txt
+      - name: Upload named staging acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-authoritative-named-staging-acceptance
+          path: |
+            authoritative-node-cloudflared-version.txt
+            authoritative-node-named-staging-smoke.json
+            authoritative-node-named-staging-loadtest.json
+            authoritative-node-named-staging-identity.txt
+          if-no-files-found: error
+          retention-days: 30
