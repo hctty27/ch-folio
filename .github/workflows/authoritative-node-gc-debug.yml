@@ -1,0 +1,74 @@
+name: Node Benchmark GC Debug
+
+on:
+  pull_request:
+    branches:
+      - feat/authoritative-physics-foundation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-authoritative-gc-debug-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Record host and V8 environment
+        shell: bash
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "nproc=$(nproc)"
+            echo "=== uname ==="
+            uname -a
+            echo "=== uptime ==="
+            uptime
+            echo "=== lscpu ==="
+            lscpu
+            echo "=== memory ==="
+            free -m || true
+            echo "=== cpu pressure ==="
+            cat /proc/pressure/cpu 2>/dev/null || true
+            echo "=== v8 heap statistics ==="
+            node -e "const v8=require('node:v8'); console.log(JSON.stringify(v8.getHeapStatistics(), null, 2))"
+          } > authoritative-node-gc-environment.txt
+      - name: Run GC-correlated 36000-tick diagnostic
+        id: diagnostic
+        shell: bash
+        run: |
+          set +e
+          node --trace-gc scripts/benchmark-authoritative-room.mjs \
+            --diagnostics \
+            --slow-tick-threshold-ms=5 \
+            --output=authoritative-node-gc-diagnostic.json \
+            > authoritative-node-gc-trace.log 2>&1
+          status=$?
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload GC diagnostic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-authoritative-gc-debug
+          path: |
+            authoritative-node-gc-diagnostic.json
+            authoritative-node-gc-trace.log
+            authoritative-node-gc-environment.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Record diagnostic gate status
+        shell: bash
+        run: echo "benchmark_exit_status=${{ steps.diagnostic.outputs.status }}"
