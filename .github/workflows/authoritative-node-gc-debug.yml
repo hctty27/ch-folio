@@ -1,4 +1,4 @@
-name: Node Benchmark GC Debug
+name: Node Benchmark Scheduler Debug
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: node-authoritative-gc-debug-${{ github.event.pull_request.head.ref }}
+  group: node-authoritative-scheduler-debug-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Record host and V8 environment
+      - name: Record scheduler environment
         shell: bash
         run: |
           {
@@ -33,6 +33,8 @@ jobs:
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
             echo "nproc=$(nproc)"
+            echo "taskset=$(command -v taskset || true)"
+            echo "vmstat=$(command -v vmstat || true)"
             echo "=== uname ==="
             uname -a
             echo "=== uptime ==="
@@ -43,32 +45,55 @@ jobs:
             free -m || true
             echo "=== cpu pressure ==="
             cat /proc/pressure/cpu 2>/dev/null || true
-            echo "=== v8 heap statistics ==="
-            node -e "const v8=require('node:v8'); console.log(JSON.stringify(v8.getHeapStatistics(), null, 2))"
-          } > authoritative-node-gc-environment.txt
-      - name: Run GC-correlated 36000-tick diagnostic
+          } > authoritative-node-scheduler-environment.txt
+      - name: Compare baseline and CPU-pinned 36000-tick diagnostics
         id: diagnostic
         shell: bash
         run: |
           set +e
-          node --trace-gc scripts/benchmark-authoritative-room.mjs \
+          if command -v vmstat >/dev/null 2>&1; then
+            vmstat 1 > authoritative-node-vmstat.log &
+            VMSTAT_PID=$!
+          else
+            VMSTAT_PID=""
+            : > authoritative-node-vmstat.log
+          fi
+          trap 'if [ -n "$VMSTAT_PID" ]; then kill "$VMSTAT_PID" 2>/dev/null || true; fi' EXIT
+
+          node scripts/benchmark-authoritative-room.mjs \
             --diagnostics \
             --slow-tick-threshold-ms=5 \
-            --output=authoritative-node-gc-diagnostic.json \
-            > authoritative-node-gc-trace.log 2>&1
-          status=$?
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
+            --output=authoritative-node-baseline-diagnostic.json \
+            > authoritative-node-baseline.log 2>&1
+          baseline_status=$?
+
+          sleep 2
+
+          taskset -c 1 node scripts/benchmark-authoritative-room.mjs \
+            --diagnostics \
+            --slow-tick-threshold-ms=5 \
+            --output=authoritative-node-pinned-diagnostic.json \
+            > authoritative-node-pinned.log 2>&1
+          pinned_status=$?
+
+          echo "baseline_status=${baseline_status}" >> "$GITHUB_OUTPUT"
+          echo "pinned_status=${pinned_status}" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Upload GC diagnostic evidence
+      - name: Upload scheduler diagnostic evidence
         uses: actions/upload-artifact@v4
         with:
-          name: node-authoritative-gc-debug
+          name: node-authoritative-scheduler-debug
           path: |
-            authoritative-node-gc-diagnostic.json
-            authoritative-node-gc-trace.log
-            authoritative-node-gc-environment.txt
+            authoritative-node-baseline-diagnostic.json
+            authoritative-node-pinned-diagnostic.json
+            authoritative-node-baseline.log
+            authoritative-node-pinned.log
+            authoritative-node-vmstat.log
+            authoritative-node-scheduler-environment.txt
           if-no-files-found: error
           retention-days: 7
       - name: Record diagnostic gate status
         shell: bash
-        run: echo "benchmark_exit_status=${{ steps.diagnostic.outputs.status }}"
+        run: |
+          echo "baseline_exit_status=${{ steps.diagnostic.outputs.baseline_status }}"
+          echo "pinned_exit_status=${{ steps.diagnostic.outputs.pinned_status }}"
