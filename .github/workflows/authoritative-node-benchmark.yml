@@ -1,9 +1,6 @@
 name: Node Authoritative Benchmark Evidence
 
 on:
-  pull_request:
-    branches:
-      - feat/authoritative-physics-foundation
   workflow_dispatch:
 
 permissions:
@@ -20,8 +17,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
