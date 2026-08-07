@@ -16,6 +16,13 @@ function nonNegativeInteger(value, label)
     return value
 }
 
+function metricName(name, label)
+{
+    if(typeof name !== 'string' || name.length === 0)
+        throw new TypeError(`${label} name must be a non-empty string`)
+    return name
+}
+
 function percentile(sorted, ratio)
 {
     if(sorted.length === 0)
@@ -47,16 +54,23 @@ export class Metrics
 
     recordPhase(name, milliseconds)
     {
-        if(typeof name !== 'string' || name.length === 0)
-            throw new TypeError('metric phase name must be a non-empty string')
-
+        const phaseName = metricName(name, 'metric phase')
         const value = finiteNonNegative(milliseconds, 'milliseconds')
-        const samples = this.phases.get(name) ?? []
+        const samples = this.phases.get(phaseName) ?? []
         samples.push(value)
-        this.phases.set(name, samples)
+        this.phases.set(phaseName, samples)
         this.benchmarkPendingPhases.set(
-            name,
-            (this.benchmarkPendingPhases.get(name) ?? 0) + value,
+            phaseName,
+            (this.benchmarkPendingPhases.get(phaseName) ?? 0) + value,
+        )
+    }
+
+    recordDiagnostic(name, value)
+    {
+        const diagnosticName = metricName(name, 'metric diagnostic')
+        this.benchmarkPendingDiagnostics.set(
+            diagnosticName,
+            finiteNonNegative(value, 'diagnostic value'),
         )
     }
 
@@ -129,6 +143,8 @@ export class Metrics
     {
         const phaseEntries = [ ...this.benchmarkPhases.entries() ]
             .sort(([ left ], [ right ]) => left.localeCompare(right))
+        const diagnosticEntries = [ ...this.benchmarkDiagnostics.entries() ]
+            .sort(([ left ], [ right ]) => left.localeCompare(right))
         const phases = Object.fromEntries(phaseEntries
             .map(([ name, samples ]) => [ name, summarize(samples) ]))
         return {
@@ -136,7 +152,7 @@ export class Metrics
             endTick: this.benchmarkTicks.at(-1) ?? 0,
             ticks: this.benchmarkTicks.length,
             phases,
-            slowTicks: this.readSlowTicks(phaseEntries),
+            slowTicks: this.readSlowTicks(phaseEntries, diagnosticEntries),
             scheduler: { ...this.benchmarkScheduler },
             gauges: {
                 queueDepth: this.queueDepth,
@@ -148,7 +164,7 @@ export class Metrics
         }
     }
 
-    readSlowTicks(phaseEntries)
+    readSlowTicks(phaseEntries, diagnosticEntries)
     {
         const totalSamples = this.benchmarkPhases.get('totalTick') ?? []
         return this.benchmarkTicks
@@ -163,6 +179,10 @@ export class Metrics
                 tick,
                 totalMs,
                 phases: Object.fromEntries(phaseEntries.map(([ name, samples ]) => [
+                    name,
+                    samples[index] ?? 0,
+                ])),
+                diagnostics: Object.fromEntries(diagnosticEntries.map(([ name, samples ]) => [
                     name,
                     samples[index] ?? 0,
                 ])),
@@ -181,6 +201,8 @@ export class Metrics
         this.benchmarkTicks = []
         this.benchmarkPhases = new Map()
         this.benchmarkPendingPhases = new Map()
+        this.benchmarkDiagnostics = new Map()
+        this.benchmarkPendingDiagnostics = new Map()
         this.benchmarkScheduler = this.emptyScheduler()
         this.benchmarkMaxQueueDepth = 0
         this.benchmarkMaxSlots = 0
@@ -205,25 +227,41 @@ export class Metrics
         const priorLength = this.benchmarkTicks.length
         this.benchmarkTicks.push(tick)
 
-        for(const [ name, samples ] of this.benchmarkPhases)
-            samples.push(this.benchmarkPendingPhases.get(name) ?? 0)
-
-        for(const [ name, total ] of this.benchmarkPendingPhases)
-        {
-            if(this.benchmarkPhases.has(name))
-                continue
-            const samples = Array.from({ length: priorLength }, () => 0)
-            samples.push(total)
-            this.benchmarkPhases.set(name, samples)
-        }
-        this.benchmarkPendingPhases.clear()
+        this.appendPendingSamples(
+            this.benchmarkPhases,
+            this.benchmarkPendingPhases,
+            priorLength,
+        )
+        this.appendPendingSamples(
+            this.benchmarkDiagnostics,
+            this.benchmarkPendingDiagnostics,
+            priorLength,
+        )
 
         if(this.benchmarkTicks.length > BENCHMARK_TICKS)
         {
             this.benchmarkTicks.shift()
             for(const samples of this.benchmarkPhases.values())
                 samples.shift()
+            for(const samples of this.benchmarkDiagnostics.values())
+                samples.shift()
         }
+    }
+
+    appendPendingSamples(target, pending, priorLength)
+    {
+        for(const [ name, samples ] of target)
+            samples.push(pending.get(name) ?? 0)
+
+        for(const [ name, value ] of pending)
+        {
+            if(target.has(name))
+                continue
+            const samples = Array.from({ length: priorLength }, () => 0)
+            samples.push(value)
+            target.set(name, samples)
+        }
+        pending.clear()
     }
 
     emptyScheduler()
