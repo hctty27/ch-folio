@@ -1,0 +1,52 @@
+name: Task 19 Cutover Preflight
+
+on:
+  pull_request:
+    branches:
+      - feat/authoritative-physics-foundation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hk-server-task19-cutover-preflight
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect persistent Node cutover prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "runner_user=$(id -un)"
+          if sudo -n true 2>/dev/null; then
+            echo "passwordless_sudo=yes"
+          else
+            echo "passwordless_sudo=no"
+          fi
+          if systemctl list-unit-files ch-folio-authoritative-node.service --no-legend 2>/dev/null | grep -q '^ch-folio-authoritative-node.service'; then
+            echo "unit_installed=yes"
+            echo "unit_enabled=$(systemctl is-enabled ch-folio-authoritative-node.service 2>/dev/null || true)"
+            echo "unit_active=$(systemctl is-active ch-folio-authoritative-node.service 2>/dev/null || true)"
+          else
+            echo "unit_installed=no"
+          fi
+          if ss -H -ltn '( sport = :8080 )' | grep -q .; then
+            echo "port_8080_listening=yes"
+            if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8080/healthz >/dev/null; then
+              echo "loopback_healthz=yes"
+            else
+              echo "loopback_healthz=no"
+            fi
+          else
+            echo "port_8080_listening=no"
+          fi
+          if pgrep -x cloudflared >/dev/null 2>&1; then
+            echo "cloudflared_running=yes"
+          else
+            echo "cloudflared_running=no"
+          fi
