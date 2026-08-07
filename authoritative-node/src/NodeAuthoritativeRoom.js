@@ -456,6 +456,8 @@ export class NodeAuthoritativeRoom
     {
         if(this.simulation === null || this.destroyed)
             return this.currentTick
+        if(this.benchmarkTokenDigest !== null)
+            return this.advanceOneTickWithBenchmarkPhases()
 
         const started = performance.now()
         this.currentTick = this.simulation.advanceOneTick()
@@ -472,6 +474,47 @@ export class NodeAuthoritativeRoom
         this.metrics.recordPhase('totalTick', performance.now() - started)
         this.metrics.recordQueueDepth(this.readQueueDepth())
         this.metrics.setSlots(this.sessions.size)
+        this.metrics.completeTick(completedTick)
+        return this.currentTick
+    }
+
+    advanceOneTickWithBenchmarkPhases()
+    {
+        const started = performance.now()
+
+        let phaseStarted = performance.now()
+        this.currentTick = this.simulation.advanceOneTick()
+        this.metrics.recordPhase('simulationAdvance', performance.now() - phaseStarted)
+        const completedTick = this.currentTick
+
+        phaseStarted = performance.now()
+        this.syncActiveSessionStates()
+        this.metrics.recordPhase('sessionSync', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        this.sessions.expireGrace(this.currentTick)
+        this.metrics.recordPhase('graceExpiry', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        if(this.currentTick % WORLD_HASH_INTERVAL_TICKS === 0)
+            this.captureWorldHash()
+        this.metrics.recordPhase('worldHashCapture', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        if(this.currentTick % STATE_BROADCAST_INTERVAL_TICKS === 0)
+            this.broadcastState()
+        this.metrics.recordPhase('stateBroadcast', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        this.cleanupIfEmpty()
+        this.metrics.recordPhase('cleanup', performance.now() - phaseStarted)
+
+        this.metrics.recordPhase('totalTick', performance.now() - started)
+
+        phaseStarted = performance.now()
+        this.metrics.recordQueueDepth(this.readQueueDepth())
+        this.metrics.setSlots(this.sessions.size)
+        this.metrics.recordPhase('queueBookkeeping', performance.now() - phaseStarted)
         this.metrics.completeTick(completedTick)
         return this.currentTick
     }
