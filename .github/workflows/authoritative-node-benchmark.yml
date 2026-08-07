@@ -22,6 +22,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -33,7 +35,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "commit=${GITHUB_SHA}"
+            echo "commit=$(git rev-parse HEAD)"
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
           } > authoritative-node-benchmark-identity.txt
