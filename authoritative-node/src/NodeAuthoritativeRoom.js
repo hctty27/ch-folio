@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks'
 import mapSource from '../../packages/authoritative-physics/generated/map-v1.json' with { type: 'json' }
 import RAPIER from '@dimforge/rapier3d'
 import {
@@ -19,6 +20,7 @@ import {
     loadAuthoritativeMap,
 } from '@ch-folio/authoritative-physics'
 import { WebSocket } from 'ws'
+import { Metrics } from './Metrics.js'
 import { SessionRegistry, SESSION_STATES } from './SessionRegistry.js'
 import { TickScheduler } from './TickScheduler.js'
 import { resumeTokenFromBytes, resumeTokenToBytes } from './token.js'
@@ -76,6 +78,7 @@ export class NodeAuthoritativeRoom
         this.onEmpty = onEmpty
         this.autoSchedule = autoSchedule
         this.sessions = new SessionRegistry()
+        this.metrics = new Metrics()
         this.sockets = new Set()
         this.attachments = new Map()
         this.authoritativeMap = null
@@ -91,6 +94,8 @@ export class NodeAuthoritativeRoom
         this.scheduler = new TickScheduler({
             clock,
             onTick: () => this.advanceOneTick(),
+            onCallback: (dueTicks, executedTicks) =>
+                this.metrics.recordSchedulerCallback(dueTicks, executedTicks),
         })
     }
 
@@ -379,12 +384,22 @@ export class NodeAuthoritativeRoom
         }
     }
 
+    readQueueDepth()
+    {
+        if(this.simulation === null)
+            return 0
+        return this.simulation.slots.reduce((maximum, slot) =>
+            Math.max(maximum, slot?.queuedInputs?.size ?? 0), 0)
+    }
+
     advanceOneTick()
     {
         if(this.simulation === null || this.destroyed)
             return this.currentTick
 
+        const started = performance.now()
         this.currentTick = this.simulation.advanceOneTick()
+        const completedTick = this.currentTick
         this.syncActiveSessionStates()
         this.sessions.expireGrace(this.currentTick)
 
@@ -394,6 +409,10 @@ export class NodeAuthoritativeRoom
             this.broadcastState()
 
         this.cleanupIfEmpty()
+        this.metrics.recordPhase('totalTick', performance.now() - started)
+        this.metrics.recordQueueDepth(this.readQueueDepth())
+        this.metrics.setSlots(this.sessions.size)
+        this.metrics.completeTick(completedTick)
         return this.currentTick
     }
 
@@ -528,7 +547,10 @@ export class NodeAuthoritativeRoom
                 currentTick: this.currentTick,
             })
         )
+        {
+            this.metrics.recordDisconnect()
             this.simulation?.disconnect(attachment.entityOrder)
+        }
 
         this.cleanupIfEmpty()
     }
