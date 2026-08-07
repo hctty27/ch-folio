@@ -1,9 +1,6 @@
 name: Node Authoritative Benchmark Evidence
 
 on:
-  push:
-    branches:
-      - feat/node-authoritative-staging
   workflow_dispatch:
 
 permissions:
