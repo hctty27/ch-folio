@@ -1,5 +1,6 @@
 const SUMMARY_TICKS = 600
 const BENCHMARK_TICKS = 36_000
+const SLOW_TICK_LIMIT = 8
 
 function finiteNonNegative(value, label)
 {
@@ -126,14 +127,16 @@ export class Metrics
 
     readBenchmarkSummary()
     {
-        const phases = Object.fromEntries([ ...this.benchmarkPhases.entries() ]
+        const phaseEntries = [ ...this.benchmarkPhases.entries() ]
             .sort(([ left ], [ right ]) => left.localeCompare(right))
+        const phases = Object.fromEntries(phaseEntries
             .map(([ name, samples ]) => [ name, summarize(samples) ]))
         return {
             startTick: this.benchmarkTicks[0] ?? 0,
             endTick: this.benchmarkTicks.at(-1) ?? 0,
             ticks: this.benchmarkTicks.length,
             phases,
+            slowTicks: this.readSlowTicks(phaseEntries),
             scheduler: { ...this.benchmarkScheduler },
             gauges: {
                 queueDepth: this.queueDepth,
@@ -143,6 +146,27 @@ export class Metrics
             },
             disconnects: this.benchmarkDisconnects,
         }
+    }
+
+    readSlowTicks(phaseEntries)
+    {
+        const totalSamples = this.benchmarkPhases.get('totalTick') ?? []
+        return this.benchmarkTicks
+            .map((tick, index) => ({
+                tick,
+                index,
+                totalMs: totalSamples[index] ?? 0,
+            }))
+            .sort((left, right) => right.totalMs - left.totalMs || right.tick - left.tick)
+            .slice(0, SLOW_TICK_LIMIT)
+            .map(({ tick, index, totalMs }) => ({
+                tick,
+                totalMs,
+                phases: Object.fromEntries(phaseEntries.map(([ name, samples ]) => [
+                    name,
+                    samples[index] ?? 0,
+                ])),
+            }))
     }
 
     reset()
