@@ -30,6 +30,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Purge stale Rapier test sandboxes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEMP_ROOT="${TMPDIR:-/tmp}"
+          find "${TEMP_ROOT}" -maxdepth 1 -type d -name 'ch-folio-rapier-*' -user "$(id -un)" -exec rm -rf -- {} +
+          df -h "${TEMP_ROOT}"
       - run: npm ci
       - run: node --test packages/authoritative-physics/test/*.test.mjs
       - name: Reject deterministic expectation updates in CI
