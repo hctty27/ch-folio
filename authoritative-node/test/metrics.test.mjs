@@ -94,6 +94,7 @@ test('benchmark summary correlates the eight slowest total ticks with same-tick 
             stateBroadcast: 0.5,
             totalTick: 10,
         },
+        diagnostics: {},
     })
     assert.deepEqual(slowTicks[1], {
         tick: 9,
@@ -102,6 +103,34 @@ test('benchmark summary correlates the eight slowest total ticks with same-tick 
             rapierStep: 0.9,
             stateBroadcast: 0,
             totalTick: 9,
+        },
+        diagnostics: {},
+    })
+})
+
+test('benchmark diagnostics preserve explicit-unit values on the same slow tick', () =>
+{
+    const metrics = new Metrics()
+    metrics.recordPhase('totalTick', 2)
+    metrics.completeTick(1)
+
+    metrics.recordPhase('totalTick', 20)
+    metrics.recordDiagnostic('totalTickCpuMs', 1.25)
+    metrics.recordDiagnostic('totalTickVoluntaryContextSwitches', 2)
+    metrics.recordDiagnostic('totalTickInvoluntaryContextSwitches', 1)
+    metrics.completeTick(2)
+
+    const [ slowest ] = metrics.readBenchmarkSummary().slowTicks
+    assert.deepEqual(slowest, {
+        tick: 2,
+        totalMs: 20,
+        phases: {
+            totalTick: 20,
+        },
+        diagnostics: {
+            totalTickCpuMs: 1.25,
+            totalTickInvoluntaryContextSwitches: 1,
+            totalTickVoluntaryContextSwitches: 2,
         },
     })
 })
@@ -137,6 +166,8 @@ test('metrics reject invalid durations and counters', () =>
     const metrics = new Metrics()
     assert.throws(() => metrics.recordPhase('', 1), /non-empty/u)
     assert.throws(() => metrics.recordPhase('tick', -1), /non-negative/u)
+    assert.throws(() => metrics.recordDiagnostic('', 1), /non-empty/u)
+    assert.throws(() => metrics.recordDiagnostic('contextSwitches', -1), /non-negative/u)
     assert.throws(() => metrics.recordQueueDepth(-1), /non-negative/u)
     assert.throws(() => metrics.setSlots(1.5), /safe integer/u)
     assert.throws(() => metrics.recordSchedulerCallback(1, 2), /cannot exceed/u)
