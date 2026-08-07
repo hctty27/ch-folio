@@ -1,9 +1,9 @@
 name: Node Authoritative Host Probe
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/node-authoritative-staging
+      - feat/authoritative-physics-foundation
 
 permissions:
   contents: read
