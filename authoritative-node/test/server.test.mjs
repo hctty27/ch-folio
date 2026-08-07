@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import test from 'node:test'
 import { WebSocket } from 'ws'
+import { readServerConfig } from '../src/config.js'
 import { normalizeRoomName } from '../src/roomName.js'
 import {
     WEBSOCKET_LIMITS,
@@ -68,9 +69,28 @@ test('WebSocket parser limits are substantially tighter than library defaults', 
     })
 })
 
-test('health endpoint is bounded, non-cacheable, and omits room internals', async (t) =>
+test('benchmark token configuration is absent by default and fail-closed when supplied', () =>
 {
-    const service = createAuthoritativeServer({ host: '127.0.0.1', port: 0 })
+    assert.equal(readServerConfig({ HOST: '127.0.0.1', PORT: '8080' }).benchmarkToken, null)
+    assert.throws(
+        () => readServerConfig({ AUTHORITATIVE_BENCHMARK_TOKEN: 'short' }),
+        /at least 32 characters/u,
+    )
+    const benchmarkToken = 'benchmark-token-0123456789-abcdef'
+    assert.equal(
+        readServerConfig({ AUTHORITATIVE_BENCHMARK_TOKEN: benchmarkToken }).benchmarkToken,
+        benchmarkToken,
+    )
+})
+
+test('health endpoint is bounded, non-cacheable, and omits room internals and benchmark secrets', async (t) =>
+{
+    const benchmarkToken = 'benchmark-token-0123456789-abcdef'
+    const service = createAuthoritativeServer({
+        host: '127.0.0.1',
+        port: 0,
+        benchmarkToken,
+    })
     await service.start()
     t.after(() => service.stop())
 
@@ -85,6 +105,7 @@ test('health endpoint is bounded, non-cacheable, and omits room internals', asyn
     assert.equal(typeof response.body.uptimeSeconds, 'number')
     assert.equal('rooms' in response.body, false)
     assert.equal('tokens' in response.body, false)
+    assert.equal(JSON.stringify(response.body).includes(benchmarkToken), false)
 })
 
 test('WebSocket upgrade requires exact path, protocol 2, and normalized room', async (t) =>
