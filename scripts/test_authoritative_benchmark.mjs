@@ -68,7 +68,7 @@ test('small local run emits deterministic machine-readable benchmark metadata', 
     assert.equal(typeof JSON.parse(JSON.stringify(report)).gates.pass, 'boolean')
 })
 
-test('diagnostic local run reports wall time, CPU time, and context-switch deltas without changing gates', async () =>
+test('diagnostic local run reports phase, GC, CPU, memory, and context-switch evidence without changing gates', async () =>
 {
     const report = await runLocalBenchmark({
         ticks: 120,
@@ -89,6 +89,13 @@ test('diagnostic local run reports wall time, CPU time, and context-switch delta
     assert.equal(Number.isFinite(first.cpuTotalMs), true)
     assert.equal(Number.isSafeInteger(first.voluntaryContextSwitchesDelta), true)
     assert.equal(Number.isSafeInteger(first.involuntaryContextSwitchesDelta), true)
+    assert.equal(typeof first.phaseDurationsMs, 'object')
+    assert.equal(Number.isFinite(first.phaseDurationsMs.rapierStep), true)
+    assert.equal(Number.isFinite(first.phaseDurationsMs.controllerUpdate), true)
+    assert.equal(Array.isArray(first.gcEvents), true)
+    assert.equal(Number.isSafeInteger(first.memoryAfter.heapUsedBytes), true)
+    assert.equal(Number.isSafeInteger(first.memoryAfter.externalBytes), true)
+    assert.equal(Number.isSafeInteger(first.memoryAfter.arrayBuffersBytes), true)
     assert.ok(first.endTimeMs >= first.startTimeMs)
     assert.ok(first.totalMs >= 0)
     assert.ok(first.cpuUserMs >= 0)
@@ -96,6 +103,11 @@ test('diagnostic local run reports wall time, CPU time, and context-switch delta
     assert.equal(first.cpuTotalMs, first.cpuUserMs + first.cpuSystemMs)
     assert.ok(first.voluntaryContextSwitchesDelta >= 0)
     assert.ok(first.involuntaryContextSwitchesDelta >= 0)
+    assert.ok(first.phaseDurationsMs.rapierStep >= 0)
+    assert.ok(first.phaseDurationsMs.controllerUpdate >= 0)
+    assert.ok(first.memoryAfter.heapUsedBytes >= 0)
+    assert.ok(first.memoryAfter.externalBytes >= 0)
+    assert.ok(first.memoryAfter.arrayBuffersBytes >= 0)
     assert.equal(report.gates.pass, evaluateBenchmarkGates(report).pass)
 })
 
