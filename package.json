@@ -30,6 +30,7 @@
     "benchmark:authoritative:local": "node scripts/benchmark-authoritative-room.mjs",
     "benchmark:authoritative:worker": "node scripts/loadtest-authoritative-worker.mjs",
     "benchmark:authoritative:node": "node scripts/loadtest-authoritative-node.mjs",
+    "smoke:authoritative-node-staging": "node scripts/smoke-authoritative-node-staging.mjs",
     "test:authoritative-map": "node --test packages/authoritative-physics/test/map.test.mjs",
     "test:cockpit": "node --test scripts/test_cockpit_pose.mjs",
     "test:camera": "node --test scripts/test_camera_modes.mjs scripts/test_camera_controls_help.mjs",
