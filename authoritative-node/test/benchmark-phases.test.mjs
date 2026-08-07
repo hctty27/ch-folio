@@ -8,12 +8,8 @@ const BENCHMARK_TOKEN = 'benchmark-token-0123456789abcdef0123456789abcdef'
 const REQUIRED_PHASES = [
     'simulationBookkeeping',
     'simulationBookkeepingCpu',
-    'authoritativeWorld',
-    'authoritativeWorldCpu',
-    'authoritativeController',
-    'authoritativeControllerCpu',
-    'authoritativeRuntimeUpdate',
-    'authoritativeRuntimeUpdateCpu',
+    'authoritativeControllerUpdate',
+    'authoritativeControllerUpdateCpu',
     'rapierStep',
     'rapierStepCpu',
     'stateRead',
@@ -57,11 +53,15 @@ test('benchmark room records wall and CPU timing for simulation and state broadc
 
         assert.ok(
             summary.phases.simulationAdvance.totalMs
-            >= summary.phases.authoritativeWorld.totalMs,
+            >= summary.phases.rapierStep.totalMs,
         )
         assert.ok(
-            summary.phases.authoritativeWorld.totalMs
-            >= summary.phases.rapierStep.totalMs,
+            summary.phases.simulationNonRapier.totalMs
+            >= summary.phases.simulationBookkeeping.totalMs,
+        )
+        assert.ok(
+            summary.phases.simulationNonRapier.totalMs
+            >= summary.phases.authoritativeControllerUpdate.totalMs,
         )
     }
     finally
