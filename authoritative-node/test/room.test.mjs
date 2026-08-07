@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { quantizeInput } from '@ch-folio/authoritative-physics'
+import { NodeAuthoritativeRoom } from '../src/NodeAuthoritativeRoom.js'
 import {
     MAX_CATCH_UP_TICKS,
     TICK_RATE_HZ,
@@ -92,6 +94,52 @@ test('scheduler caps every callback at three catch-up ticks', () =>
     assert.equal(callbacks[0].executedTicks, 3)
     assert.equal(callbacks.every(({ executedTicks }) => executedTicks <= MAX_CATCH_UP_TICKS), true)
     assert.equal(ticks, callbacks.reduce((total, callback) => total + callback.executedTicks, 0))
+})
+
+test('live room metrics record completed ticks, slot maximum, and queued input depth', async () =>
+{
+    const room = new NodeAuthoritativeRoom({ room: 'metrics', autoSchedule: false })
+    try
+    {
+        room.ensureRuntime()
+        const grant = await room.sessions.createSession({
+            room: 'metrics',
+            currentTick: room.currentTick,
+        })
+        assert.ok(grant)
+        const reserved = room.simulation.reserveSlot({ playerId: grant.playerId })
+        assert.equal(reserved.entityOrder, grant.entityOrder)
+        room.simulation.markSyncReady(grant.entityOrder)
+
+        room.advanceOneTick()
+        room.advanceOneTick()
+        room.advanceOneTick()
+
+        const targetTick = room.currentTick + 3
+        const queued = room.simulation.queueInput(grant.entityOrder, quantizeInput({
+            clientTick: targetTick,
+            sequence: 1,
+            throttle: 1,
+            brake: 0,
+            steering: 0.25,
+            suspensions: [ 'low', 'low', 'low', 'low' ],
+            boosting: false,
+            honking: false,
+        }))
+        assert.equal(queued, true)
+        assert.equal(room.readQueueDepth(), 1)
+
+        room.advanceOneTick()
+        const summary = room.metrics.readBenchmarkSummary()
+        assert.equal(summary.ticks, 4)
+        assert.equal(summary.phases.totalTick.count, 4)
+        assert.equal(summary.gauges.maxSlots, 1)
+        assert.equal(summary.gauges.maxQueueDepth, 1)
+    }
+    finally
+    {
+        await room.destroy()
+    }
 })
 
 test('room registry isolates rooms, removes only matching empty instances, and stops all rooms', async () =>
