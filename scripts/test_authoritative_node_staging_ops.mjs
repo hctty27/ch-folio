@@ -8,13 +8,13 @@ const SERVICE_PATH = new URL('../ops/authoritative-node/ch-folio-authoritative-n
 const INSTALL_PATH = new URL('../ops/authoritative-node/install-staging.sh', import.meta.url)
 const NAMED_ACCEPTANCE_PATH = new URL('../.github/workflows/authoritative-node-named-staging.yml', import.meta.url)
 
-test('systemd unit binds Node authority to loopback and loads only the host secret environment', async () =>
+test('systemd unit exposes Node authority on host IPv4 port 8080 for the existing Docker Tunnel', async () =>
 {
     const unit = await readFile(SERVICE_PATH, 'utf8')
 
     assert.match(unit, /^WorkingDirectory=\/opt\/ch-folio-authoritative-staging\/authoritative-node$/mu)
     assert.match(unit, /^EnvironmentFile=\/etc\/ch-folio-authoritative-staging\.env$/mu)
-    assert.match(unit, /^Environment=HOST=127\.0\.0\.1$/mu)
+    assert.match(unit, /^Environment=HOST=0\.0\.0\.0$/mu)
     assert.match(unit, /^Environment=PORT=8080$/mu)
     assert.match(unit, /^ExecStart=\/usr\/bin\/env npm start$/mu)
     assert.match(unit, /^Restart=on-failure$/mu)
@@ -73,18 +73,22 @@ test('staging installer is fail-closed and leaves the service stopped', async ()
     assert.doesNotMatch(script, /systemctl (?:start|restart|enable --now) (?:"\$\{UNIT_NAME\}"|ch-folio-authoritative-node)/u)
 })
 
-test('named Tunnel acceptance stays manual, credential-scoped, eight-client, and ten-minute', async () =>
+test('public staging acceptance reuses hk-test existing Tunnel and keeps the eight-client ten-minute gate', async () =>
 {
     const workflow = await readFile(NAMED_ACCEPTANCE_PATH, 'utf8')
 
     assert.match(workflow, /^\s*workflow_dispatch:\s*$/mu)
-    assert.match(workflow, /secrets\.AUTHORITATIVE_STAGING_TUNNEL_TOKEN/u)
-    assert.match(workflow, /vars\.AUTHORITATIVE_STAGING_HOSTNAME/u)
-    assert.match(workflow, /cloudflared-linux-amd64/u)
-    assert.match(workflow, /tunnel --loglevel info run --token/u)
+    assert.match(workflow, /STAGING_HOSTNAME:\s*hk-test\.testnb\.me/u)
+    assert.match(workflow, /HOST=0\.0\.0\.0/u)
+    assert.match(workflow, /PORT=8080/u)
+    assert.match(workflow, /https:\/\/\$\{STAGING_HOSTNAME\}\/healthz/u)
+    assert.match(workflow, /WSS_URL="wss:\/\/\$\{STAGING_HOSTNAME\}\/ws"/u)
     assert.match(workflow, /--clients=8/u)
     assert.match(workflow, /--seconds=600/u)
     assert.match(workflow, /node-authoritative-named-staging-acceptance/u)
+    assert.doesNotMatch(workflow, /AUTHORITATIVE_STAGING_TUNNEL_TOKEN/u)
+    assert.doesNotMatch(workflow, /cloudflared-linux-amd64/u)
+    assert.doesNotMatch(workflow, /tunnel .*run .*--token/u)
     assert.doesNotMatch(workflow, /continue-on-error/u)
     assert.doesNotMatch(workflow, /VITE_MULTIPLAYER_PROTOCOL|VITE_SERVER_URL/u)
 })
