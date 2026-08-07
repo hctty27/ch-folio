@@ -109,20 +109,35 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
         this.metrics.recordPhase('stateEncodeCpu', cpuMilliseconds(cpuStarted))
         this.eventCursor = state.eventCursor
 
+        let sendCallTotalMs = 0
+        let sendCallMaxMs = 0
         cpuStarted = cpuUsage()
         started = performance.now()
         for(const socket of this.sockets)
         {
             const attachment = this.attachments.get(socket)
             if(
-                attachment?.handshake === 'session_active'
-                && attachment.playerId !== null
-                && attachment.generation !== null
-                && this.sessions.isCurrentController(attachment.playerId, attachment.generation)
+                attachment?.handshake !== 'session_active'
+                || attachment.playerId === null
+                || attachment.generation === null
+                || !this.sessions.isCurrentController(attachment.playerId, attachment.generation)
             )
-                this.safeSend(socket, frame)
+                continue
+
+            const sendStarted = performance.now()
+            this.safeSend(socket, frame)
+            const sendMs = performance.now() - sendStarted
+            sendCallTotalMs += sendMs
+            sendCallMaxMs = Math.max(sendCallMaxMs, sendMs)
         }
-        this.metrics.recordPhase('stateSocketSend', performance.now() - started)
+        const stateSocketSendMs = performance.now() - started
+        this.metrics.recordPhase('stateSocketSend', stateSocketSendMs)
         this.metrics.recordPhase('stateSocketSendCpu', cpuMilliseconds(cpuStarted))
+        this.metrics.recordPhase('stateSocketSendCallTotal', sendCallTotalMs)
+        this.metrics.recordPhase('stateSocketSendCallMax', sendCallMaxMs)
+        this.metrics.recordPhase(
+            'stateSocketSendLoopOverhead',
+            Math.max(0, stateSocketSendMs - sendCallTotalMs),
+        )
     }
 }
