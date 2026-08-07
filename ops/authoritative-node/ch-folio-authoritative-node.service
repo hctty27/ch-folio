@@ -9,7 +9,7 @@ User=github-runner
 Group=github-runner
 WorkingDirectory=/opt/ch-folio-authoritative-staging/authoritative-node
 EnvironmentFile=/etc/ch-folio-authoritative-staging.env
-Environment=HOST=127.0.0.1
+Environment=HOST=0.0.0.0
 Environment=PORT=8080
 ExecStart=/usr/bin/env npm start
 Restart=on-failure
