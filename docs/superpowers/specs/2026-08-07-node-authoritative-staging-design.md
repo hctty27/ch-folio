@@ -74,12 +74,12 @@ http://127.0.0.1:8080
 
 The tunnel configuration ends with a catch-all `http_status:404` rule. The public hostname is used only for validation and is never written into production Pages environment variables during this increment.
 
-The staging endpoint therefore exposes:
+Let `STAGING_HOSTNAME` denote the dedicated non-production hostname created in Cloudflare for this validation environment. It is deployment configuration, not a source-code constant. The staging endpoint exposes:
 
-- `https://<staging-host>/healthz`
-- `wss://<staging-host>/ws?room=<room>&protocol=2`
-
-The literal staging hostname is intentionally deployment configuration rather than a source-code constant.
+```text
+https://${STAGING_HOSTNAME}/healthz
+wss://${STAGING_HOSTNAME}/ws?room=benchmark&protocol=2
+```
 
 ## Benchmark metrics
 
@@ -223,12 +223,4 @@ The final staging evidence document records:
 
 ## Production cutover boundary
 
-Task 19 remains a separate controlled production action. It may begin only after all staging gates above are green and the evidence has been reviewed. Only that later task may set production values equivalent to:
-
-```text
-VITE_MULTIPLAYER_ENABLED=1
-VITE_MULTIPLAYER_PROTOCOL=2
-VITE_SERVER_URL=wss://<approved-production-authoritative-host>/ws
-```
-
-The production authoritative hostname is deliberately not selected by this staging design.
+Task 19 remains a separate controlled production action. It may begin only after all staging gates above are green and the evidence has been reviewed. Production values such as `VITE_MULTIPLAYER_ENABLED`, `VITE_MULTIPLAYER_PROTOCOL`, and `VITE_SERVER_URL` remain unchanged by this staging branch. Selection of the production authoritative hostname belongs to Task 19 and is deliberately outside this design.
