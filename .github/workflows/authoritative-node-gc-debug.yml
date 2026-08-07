@@ -1,4 +1,4 @@
-name: Node Benchmark Warmup Debug
+name: Node Benchmark Warmup Repeat Debug
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: node-authoritative-warmup-debug-${{ github.event.pull_request.head.ref }}
+  group: node-authoritative-warmup-repeat-debug-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,59 +37,68 @@ jobs:
             uptime
             echo "=== cpu pressure ==="
             cat /proc/pressure/cpu 2>/dev/null || true
-          } > authoritative-node-warmup-environment.txt
-      - name: Run 6000-tick process warmup then measured 36000 ticks
+          } > authoritative-node-warmup-repeat-environment.txt
+      - name: Run process warmup then two fresh 36000-tick worlds
         id: diagnostic
         shell: bash
         run: |
           set +e
-          if command -v vmstat >/dev/null 2>&1; then
-            vmstat 1 > authoritative-node-warmup-vmstat.log &
-            VMSTAT_PID=$!
-          else
-            VMSTAT_PID=""
-            : > authoritative-node-warmup-vmstat.log
-          fi
-          trap 'if [ -n "$VMSTAT_PID" ]; then kill "$VMSTAT_PID" 2>/dev/null || true; fi' EXIT
-
-          node --input-type=module > authoritative-node-warmup.log 2>&1 <<'NODE'
+          node --input-type=module > authoritative-node-warmup-repeat.log 2>&1 <<'NODE'
           import { writeFile } from 'node:fs/promises'
           import { runLocalBenchmark } from './scripts/benchmark-authoritative-room.mjs'
 
           const warmupTicks = 6_000
           const warmup = await runLocalBenchmark({ ticks: warmupTicks })
-          const report = await runLocalBenchmark({
+          const runMeasured = () => runLocalBenchmark({
               ticks: 36_000,
               diagnostics: true,
               slowTickThresholdMs: 5,
           })
-          report.diagnostics.processWarmupTicks = warmupTicks
-          report.diagnostics.warmupGate = warmup.gates
+          const first = await runMeasured()
+          const second = await runMeasured()
+
+          first.diagnostics.processWarmupTicks = warmupTicks
+          first.diagnostics.measurementOrdinal = 1
+          second.diagnostics.processWarmupTicks = warmupTicks
+          second.diagnostics.measurementOrdinal = 2
+
           await writeFile(
-              'authoritative-node-warmed-diagnostic.json',
-              `${JSON.stringify(report, null, 2)}\n`,
+              'authoritative-node-warmed-first.json',
+              `${JSON.stringify(first, null, 2)}\n`,
+          )
+          await writeFile(
+              'authoritative-node-warmed-second.json',
+              `${JSON.stringify(second, null, 2)}\n`,
           )
           process.stdout.write(`${JSON.stringify({
               warmup: warmup.phases.totalTick,
-              measured: report.phases.totalTick,
-              gates: report.gates,
+              first: {
+                  totalTick: first.phases.totalTick,
+                  rapierStep: first.phases.rapierStep,
+                  gates: first.gates,
+              },
+              second: {
+                  totalTick: second.phases.totalTick,
+                  rapierStep: second.phases.rapierStep,
+                  gates: second.gates,
+              },
           }, null, 2)}\n`)
-          process.exitCode = report.gates.pass ? 0 : 1
+          process.exitCode = first.gates.pass && second.gates.pass ? 0 : 1
           NODE
           status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Upload warmup diagnostic evidence
+      - name: Upload repeat diagnostic evidence
         uses: actions/upload-artifact@v4
         with:
-          name: node-authoritative-warmup-debug
+          name: node-authoritative-warmup-repeat-debug
           path: |
-            authoritative-node-warmed-diagnostic.json
-            authoritative-node-warmup.log
-            authoritative-node-warmup-vmstat.log
-            authoritative-node-warmup-environment.txt
+            authoritative-node-warmed-first.json
+            authoritative-node-warmed-second.json
+            authoritative-node-warmup-repeat.log
+            authoritative-node-warmup-repeat-environment.txt
           if-no-files-found: error
           retention-days: 7
       - name: Record diagnostic gate status
         shell: bash
-        run: echo "warmed_benchmark_exit_status=${{ steps.diagnostic.outputs.status }}"
+        run: echo "repeat_benchmark_exit_status=${{ steps.diagnostic.outputs.status }}"
