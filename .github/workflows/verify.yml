@@ -15,8 +15,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
+  group: hk-server-exclusive
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   test-and-build:
