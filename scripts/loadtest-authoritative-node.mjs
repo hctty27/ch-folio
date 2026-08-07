@@ -31,6 +31,12 @@ const CREDENTIAL_QUERY_KEYS = [
     'playerId',
     'lastServerTick',
 ]
+const BUFFERED_FRAME_TYPES = new Set([
+    FRAME_TYPES.ERROR,
+    FRAME_TYPES.RESUME,
+    FRAME_TYPES.FULL_SYNC,
+    BENCHMARK_FRAME_TYPES.SUMMARY,
+])
 
 function positiveInteger(value, label)
 {
@@ -172,7 +178,7 @@ function frameType(value)
     return frame[0]
 }
 
-class FrameRouter
+export class FrameRouter
 {
     constructor(socket)
     {
@@ -186,14 +192,18 @@ class FrameRouter
         try
         {
             const type = frameType(data)
-            const queue = this.waiters.get(type)
-            if(queue?.length)
-                queue.shift().resolve(data)
-            else
+            const queue = this.waiters.get(type) ?? []
+            const waiterIndex = queue.findIndex((entry) => typeof entry.resolve === 'function')
+            if(waiterIndex >= 0)
             {
-                const pending = this.waiters.get(type) ?? []
-                pending.push({ buffered: data })
-                this.waiters.set(type, pending)
+                const [ waiter ] = queue.splice(waiterIndex, 1)
+                this.waiters.set(type, queue)
+                waiter.resolve(data)
+            }
+            else if(BUFFERED_FRAME_TYPES.has(type))
+            {
+                queue.push({ buffered: data })
+                this.waiters.set(type, queue)
             }
 
             for(const listener of this.listeners)
