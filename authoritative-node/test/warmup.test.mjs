@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { runNodeAuthoritativeBenchmark } from '../src/benchmark.js'
 import {
     AUTHORITATIVE_WARMUP_TICKS,
     runAuthoritativeWarmup,
@@ -18,6 +19,19 @@ test('authoritative startup warmup is fixed at 600 ticks and advances eight vehi
         vehicles: 8,
     })
     assert.throws(() => runAuthoritativeWarmup({ ticks: 0 }), /positive safe integer/u)
+})
+
+test('production Node benchmark warms the same runtime before measuring exact ticks', async () =>
+{
+    const report = await runNodeAuthoritativeBenchmark({
+        warmupTicks: 6,
+        ticks: 120,
+    })
+
+    assert.equal(report.metadata.productionWarmupTicks, 6)
+    assert.equal(report.metadata.ticks, 120)
+    assert.equal(report.phases.totalTick.count, 120)
+    assert.equal(report.divergence.persistent, 0)
 })
 
 test('startup completes warmup before creating or listening on the HTTP/WebSocket service', async () =>
