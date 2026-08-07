@@ -135,6 +135,52 @@ test('live room metrics record completed ticks, slot maximum, and queued input d
         assert.equal(summary.phases.totalTick.count, 4)
         assert.equal(summary.gauges.maxSlots, 1)
         assert.equal(summary.gauges.maxQueueDepth, 1)
+        assert.equal('simulationAdvance' in summary.phases, false)
+        assert.equal('stateBroadcast' in summary.phases, false)
+    }
+    finally
+    {
+        await room.destroy()
+    }
+})
+
+test('benchmark-enabled live room records tick phase breakdown without changing normal rooms', async () =>
+{
+    const room = new NodeAuthoritativeRoom({
+        room: 'benchmark-phases',
+        autoSchedule: false,
+        benchmarkToken: 'benchmark-token-0123456789abcdef0123456789abcdef',
+    })
+    try
+    {
+        room.ensureRuntime()
+        const grant = await room.sessions.createSession({
+            room: room.room,
+            currentTick: room.currentTick,
+        })
+        assert.ok(grant)
+        const reserved = room.simulation.reserveSlot({ playerId: grant.playerId })
+        assert.equal(reserved.entityOrder, grant.entityOrder)
+        room.simulation.markSyncReady(grant.entityOrder)
+
+        for(let tick = 0; tick < 60; tick++)
+            room.advanceOneTick()
+
+        const summary = room.metrics.readBenchmarkSummary()
+        for(const phase of [
+            'simulationAdvance',
+            'sessionSync',
+            'graceExpiry',
+            'worldHashCapture',
+            'stateBroadcast',
+            'cleanup',
+            'queueBookkeeping',
+        ])
+        {
+            assert.equal(summary.phases[phase].count, 60)
+            assert.ok(summary.phases[phase].maxMs >= 0)
+        }
+        assert.equal(summary.phases.totalTick.count, 60)
     }
     finally
     {
