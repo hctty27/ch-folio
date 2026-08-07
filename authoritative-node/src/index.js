@@ -1,14 +1,15 @@
 import { readServerConfig } from './config.js'
-import { createAuthoritativeServer } from './server.js'
+import { startAuthoritativeNode } from './startup.js'
 
 const config = readServerConfig()
-const service = createAuthoritativeServer(config)
+let service = null
 
 async function shutdown(signal)
 {
     try
     {
-        await service.stop()
+        if(service !== null)
+            await service.stop()
         process.exitCode = 0
     }
     catch(error)
@@ -24,17 +25,21 @@ async function shutdown(signal)
     void signal
 }
 
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+try
+{
+    const started = await startAuthoritativeNode({ config })
+    service = started.service
+    process.on('SIGINT', shutdown)
+    process.on('SIGTERM', shutdown)
 
-service.start()
-    .then(() =>
-    {
-        const address = service.address()
-        console.log(`[authoritative-node] listening on ${address.address}:${address.port}`)
-    })
-    .catch((error) =>
-    {
-        console.error('[authoritative-node] startup failed', error)
-        process.exitCode = 1
-    })
+    console.log(
+        `[authoritative-node] warmup complete: ${started.warmup.ticks} ticks, ${started.warmup.vehicles} vehicles`,
+    )
+    const address = service.address()
+    console.log(`[authoritative-node] listening on ${address.address}:${address.port}`)
+}
+catch(error)
+{
+    console.error('[authoritative-node] startup failed', error)
+    process.exitCode = 1
+}
