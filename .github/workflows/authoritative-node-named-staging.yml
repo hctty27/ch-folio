@@ -2,6 +2,9 @@ name: Node Authoritative Named Staging Acceptance
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - feat/authoritative-physics-foundation
 
 permissions:
   contents: read
@@ -141,6 +144,7 @@ jobs:
             echo "existing_cloudflared_alive=yes"
           } > authoritative-node-named-staging-identity.txt
       - name: Upload named staging acceptance evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: node-authoritative-named-staging-acceptance
