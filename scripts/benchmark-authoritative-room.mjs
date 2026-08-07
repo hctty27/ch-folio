@@ -214,6 +214,7 @@ export async function runLocalBenchmark({
     ticks = DEFAULT_TICKS,
     diagnostics = false,
     slowTickThresholdMs = DEFAULT_SLOW_TICK_THRESHOLD_MS,
+    rapier = null,
 } = {})
 {
     if(!Number.isSafeInteger(ticks) || ticks < 1)
@@ -224,7 +225,7 @@ export async function runLocalBenchmark({
 
     const normalized = validateScenarioFixture(pileupFixture)
     const inputsByFixtureTick = groupInputs(normalized)
-    const RAPIER = await loadRapierForNode()
+    const RAPIER = rapier ?? await loadRapierForNode()
     const primary = createWorld(RAPIER, normalized)
     const shadow = createWorld(RAPIER, normalized)
     const samples = new Map()
