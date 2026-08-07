@@ -18,6 +18,9 @@ const REQUIRED_PHASES = [
     'stateEncodeCpu',
     'stateSocketSend',
     'stateSocketSendCpu',
+    'stateSocketSendCallTotal',
+    'stateSocketSendCallMax',
+    'stateSocketSendLoopOverhead',
 ]
 
 test('benchmark room records wall and CPU timing for simulation and state broadcast subphases', async () =>
@@ -40,8 +43,27 @@ test('benchmark room records wall and CPU timing for simulation and state broadc
         assert.equal(reserved.entityOrder, grant.entityOrder)
         room.simulation.markSyncReady(grant.entityOrder)
 
+        let sendCount = 0
+        const socket = {
+            readyState: 1,
+            send()
+            {
+                sendCount++
+            },
+        }
+        room.sockets.add(socket)
+        room.attachments.set(socket, {
+            handshake: 'session_active',
+            playerId: grant.playerId,
+            generation: grant.generation,
+        })
+
         for(let tick = 0; tick < 60; tick++)
             room.advanceOneTick()
+
+        room.sockets.delete(socket)
+        room.attachments.delete(socket)
+        assert.equal(sendCount, 20)
 
         const summary = room.metrics.readBenchmarkSummary()
         for(const phase of REQUIRED_PHASES)
@@ -62,6 +84,14 @@ test('benchmark room records wall and CPU timing for simulation and state broadc
         assert.ok(
             summary.phases.simulationNonRapier.totalMs
             >= summary.phases.authoritativeControllerUpdate.totalMs,
+        )
+        assert.ok(
+            summary.phases.stateSocketSend.totalMs
+            >= summary.phases.stateSocketSendCallTotal.totalMs,
+        )
+        assert.ok(
+            summary.phases.stateSocketSendCallTotal.totalMs
+            >= summary.phases.stateSocketSendCallMax.totalMs,
         )
     }
     finally
