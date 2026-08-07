@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { quantizeInput } from '@ch-folio/authoritative-physics'
+import { BenchmarkNodeAuthoritativeRoom } from '../src/BenchmarkNodeAuthoritativeRoom.js'
 import { NodeAuthoritativeRoom } from '../src/NodeAuthoritativeRoom.js'
 import {
     MAX_CATCH_UP_TICKS,
@@ -8,6 +9,8 @@ import {
     TickScheduler,
 } from '../src/TickScheduler.js'
 import { RoomRegistry } from '../src/RoomRegistry.js'
+
+const BENCHMARK_TOKEN = 'benchmark-token-0123456789abcdef0123456789abcdef'
 
 class FakeClock
 {
@@ -148,10 +151,10 @@ test('live room metrics record completed ticks, slot maximum, and queued input d
 
 test('benchmark-enabled live room records tick phase breakdown without changing normal rooms', async () =>
 {
-    const room = new NodeAuthoritativeRoom({
+    const room = new BenchmarkNodeAuthoritativeRoom({
         room: 'benchmark-phases',
         autoSchedule: false,
-        benchmarkToken: 'benchmark-token-0123456789abcdef0123456789abcdef',
+        benchmarkToken: BENCHMARK_TOKEN,
     })
     try
     {
@@ -191,6 +194,26 @@ test('benchmark-enabled live room records tick phase breakdown without changing 
     finally
     {
         await room.destroy()
+    }
+})
+
+test('room registry selects benchmark timing only when a benchmark token is configured', async () =>
+{
+    const regularRegistry = new RoomRegistry()
+    const benchmarkRegistry = new RoomRegistry({
+        roomOptions: { benchmarkToken: BENCHMARK_TOKEN },
+    })
+    try
+    {
+        assert.ok(regularRegistry.getOrCreate('regular') instanceof NodeAuthoritativeRoom)
+        assert.ok(
+            benchmarkRegistry.getOrCreate('benchmark') instanceof BenchmarkNodeAuthoritativeRoom,
+        )
+    }
+    finally
+    {
+        await regularRegistry.stop()
+        await benchmarkRegistry.stop()
     }
 })
 
