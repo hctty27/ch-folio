@@ -6,6 +6,7 @@ import { renderCloudflaredConfig } from '../ops/authoritative-node/render-cloudf
 
 const SERVICE_PATH = new URL('../ops/authoritative-node/ch-folio-authoritative-node.service', import.meta.url)
 const INSTALL_PATH = new URL('../ops/authoritative-node/install-staging.sh', import.meta.url)
+const NAMED_ACCEPTANCE_PATH = new URL('../.github/workflows/authoritative-node-named-staging.yml', import.meta.url)
 
 test('systemd unit binds Node authority to loopback and loads only the host secret environment', async () =>
 {
@@ -70,4 +71,20 @@ test('staging installer is fail-closed and leaves the service stopped', async ()
     assert.match(script, /systemctl daemon-reload/u)
     assert.match(script, /systemctl stop "\$\{UNIT_NAME\}"/u)
     assert.doesNotMatch(script, /systemctl (?:start|restart|enable --now) (?:"\$\{UNIT_NAME\}"|ch-folio-authoritative-node)/u)
+})
+
+test('named Tunnel acceptance stays manual, credential-scoped, eight-client, and ten-minute', async () =>
+{
+    const workflow = await readFile(NAMED_ACCEPTANCE_PATH, 'utf8')
+
+    assert.match(workflow, /^\s*workflow_dispatch:\s*$/mu)
+    assert.match(workflow, /secrets\.AUTHORITATIVE_STAGING_TUNNEL_TOKEN/u)
+    assert.match(workflow, /vars\.AUTHORITATIVE_STAGING_HOSTNAME/u)
+    assert.match(workflow, /cloudflared-linux-amd64/u)
+    assert.match(workflow, /tunnel --loglevel info run --token/u)
+    assert.match(workflow, /--clients=8/u)
+    assert.match(workflow, /--seconds=600/u)
+    assert.match(workflow, /node-authoritative-named-staging-acceptance/u)
+    assert.doesNotMatch(workflow, /continue-on-error/u)
+    assert.doesNotMatch(workflow, /VITE_MULTIPLAYER_PROTOCOL|VITE_SERVER_URL/u)
 })
