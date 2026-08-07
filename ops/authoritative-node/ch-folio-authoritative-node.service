@@ -1,0 +1,25 @@
+[Unit]
+Description=ch-folio authoritative Node staging server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=github-runner
+Group=github-runner
+WorkingDirectory=/opt/ch-folio-authoritative-staging/authoritative-node
+EnvironmentFile=/etc/ch-folio-authoritative-staging.env
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+ExecStart=/usr/bin/env npm start
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=15s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
