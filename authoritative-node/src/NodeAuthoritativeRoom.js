@@ -3,15 +3,21 @@ import mapSource from '../../packages/authoritative-physics/generated/map-v1.jso
 import RAPIER from '@dimforge/rapier3d'
 import {
     AuthoritativeWorld,
+    BENCHMARK_FRAME_TYPES,
     FRAME_TYPES,
     LIFECYCLE_FRAME_TYPES,
+    RAPIER_VERSION,
     ROOM_SLOT_STATES,
     RoomSimulation,
+    VERSIONS,
+    decodeBenchmarkSummaryRequest,
     decodeFullSyncRequest,
     decodeHello,
     decodeInputBatch,
     decodeResume,
     decodeSyncReady,
+    digestBenchmarkToken,
+    encodeBenchmarkSummary,
     encodeErrorFrame,
     encodeFullSyncFrame,
     encodeResume,
@@ -23,7 +29,11 @@ import { WebSocket } from 'ws'
 import { Metrics } from './Metrics.js'
 import { SessionRegistry, SESSION_STATES } from './SessionRegistry.js'
 import { TickScheduler } from './TickScheduler.js'
-import { resumeTokenFromBytes, resumeTokenToBytes } from './token.js'
+import {
+    constantTimeEqual,
+    resumeTokenFromBytes,
+    resumeTokenToBytes,
+} from './token.js'
 
 const ERROR_CODES = Object.freeze({
     HELLO_REQUIRED: 1,
@@ -33,10 +43,12 @@ const ERROR_CODES = Object.freeze({
     INVALID_RESUME: 5,
     STALE_CONNECTION: 6,
     SESSION_FAILURE: 7,
+    BENCHMARK_UNAVAILABLE: 8,
 })
 
 const STATE_BROADCAST_INTERVAL_TICKS = 3
 const WORLD_HASH_INTERVAL_TICKS = 60
+const MIN_BENCHMARK_TOKEN_LENGTH = 32
 
 function createAttachment()
 {
@@ -67,18 +79,27 @@ export class NodeAuthoritativeRoom
         onEmpty = () => {},
         clock,
         autoSchedule = true,
+        benchmarkToken = null,
     } = {})
     {
         if(typeof room !== 'string' || room.length < 1)
             throw new TypeError('room must be a non-empty string')
         if(typeof onEmpty !== 'function')
             throw new TypeError('onEmpty must be a function')
+        if(
+            benchmarkToken !== null
+            && (typeof benchmarkToken !== 'string' || benchmarkToken.length < MIN_BENCHMARK_TOKEN_LENGTH)
+        )
+            throw new RangeError(`benchmarkToken must contain at least ${MIN_BENCHMARK_TOKEN_LENGTH} characters`)
 
         this.room = room
         this.onEmpty = onEmpty
         this.autoSchedule = autoSchedule
         this.sessions = new SessionRegistry()
         this.metrics = new Metrics()
+        this.benchmarkTokenDigest = benchmarkToken === null
+            ? null
+            : digestBenchmarkToken(benchmarkToken)
         this.sockets = new Set()
         this.attachments = new Map()
         this.authoritativeMap = null
@@ -340,6 +361,11 @@ export class NodeAuthoritativeRoom
                 this.sendFullSync(socket)
                 return
             }
+            if(frameType === BENCHMARK_FRAME_TYPES.SUMMARY_REQUEST)
+            {
+                await this.acceptBenchmarkSummary(socket, bytes)
+                return
+            }
             this.rejectSocket(socket, ERROR_CODES.UNEXPECTED_FRAME, 'UNEXPECTED_FRAME', 1008)
         }
         catch(error)
@@ -347,6 +373,40 @@ export class NodeAuthoritativeRoom
             console.warn('[authoritative-node] invalid active frame', error)
             this.rejectSocket(socket, ERROR_CODES.INVALID_HANDSHAKE, 'INVALID_FRAME', 1002)
         }
+    }
+
+    async acceptBenchmarkSummary(socket, bytes)
+    {
+        const request = decodeBenchmarkSummaryRequest(bytes)
+        const expected = this.benchmarkTokenDigest === null
+            ? null
+            : await this.benchmarkTokenDigest
+        if(expected === null || !constantTimeEqual(expected, request.tokenDigest))
+        {
+            this.rejectSocket(
+                socket,
+                ERROR_CODES.BENCHMARK_UNAVAILABLE,
+                'BENCHMARK_UNAVAILABLE',
+                1008,
+            )
+            return
+        }
+
+        const summary = {
+            schemaVersion: 1,
+            mode: 'node',
+            room: this.room,
+            currentTick: this.currentTick,
+            runtimeStarts: 1,
+            roomRestarts: 0,
+            rapierVersion: RAPIER_VERSION,
+            versions: VERSIONS,
+            rapierInternalTimingAvailable: false,
+            observedPeakMemoryBytes: process.memoryUsage.rss(),
+            memoryScope: 'node-process-rss',
+            metrics: this.metrics.readBenchmarkSummary(),
+        }
+        this.safeSend(socket, encodeBenchmarkSummary(summary))
     }
 
     acceptSyncReady(attachment)
