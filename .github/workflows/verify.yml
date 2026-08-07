@@ -109,3 +109,48 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
         shell: bash
         run: exit "${{ steps.staging_benchmark.outputs.status }}"
+      - name: Smoke real staging Node startup on loopback
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::${TOKEN}"
+          SERVICE_LOG="${RUNNER_TEMP}/authoritative-node-loopback.log"
+
+          HOST=127.0.0.1 \
+          PORT=8080 \
+          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
+          node authoritative-node/src/index.js >"${SERVICE_LOG}" 2>&1 &
+          SERVER_PID=$!
+
+          cleanup() {
+            kill "${SERVER_PID}" 2>/dev/null || true
+            wait "${SERVER_PID}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+              echo "Node authority exited before healthz became ready" >&2
+              cat "${SERVICE_LOG}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+
+          if [[ "${ready}" -ne 1 ]]; then
+            echo "Node authority did not become healthy after production warmup" >&2
+            cat "${SERVICE_LOG}" >&2
+            exit 1
+          fi
+
+          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
+            npm run smoke:authoritative-node-staging -- \
+              --url=ws://127.0.0.1:8080/ws \
+              --room=ci-staging-smoke
