@@ -64,7 +64,28 @@ test('small local run emits deterministic machine-readable benchmark metadata', 
     assert.equal(report.gauges.maxQueueDepth, 0)
     assert.equal(report.disconnects, 0)
     assert.equal(report.phases.totalTick.count, 120)
+    assert.equal('diagnostics' in report, false)
     assert.equal(typeof JSON.parse(JSON.stringify(report)).gates.pass, 'boolean')
+})
+
+test('diagnostic local run reports bounded slow-tick time windows without changing gate semantics', async () =>
+{
+    const report = await runLocalBenchmark({
+        ticks: 120,
+        diagnostics: true,
+        slowTickThresholdMs: 0,
+    })
+
+    assert.equal(report.diagnostics.slowTickThresholdMs, 0)
+    assert.equal(report.diagnostics.slowTicks.length, 120)
+    assert.equal(report.diagnostics.slowTicks[0].tick, 1)
+    assert.equal(report.diagnostics.slowTicks[0].fixtureTick, 1)
+    assert.equal(Number.isFinite(report.diagnostics.slowTicks[0].startTimeMs), true)
+    assert.equal(Number.isFinite(report.diagnostics.slowTicks[0].endTimeMs), true)
+    assert.equal(Number.isFinite(report.diagnostics.slowTicks[0].totalMs), true)
+    assert.ok(report.diagnostics.slowTicks[0].endTimeMs >= report.diagnostics.slowTicks[0].startTimeMs)
+    assert.equal(report.diagnostics.slowTicks[0].totalMs >= 0, true)
+    assert.equal(report.gates.pass, evaluateBenchmarkGates(report).pass)
 })
 
 test('deployed load options keep credentials out of the URL and report metadata', () =>
