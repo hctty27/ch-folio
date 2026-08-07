@@ -249,6 +249,8 @@ export async function runLocalBenchmark({
         for(let tick = 1; tick <= ticks; tick++)
         {
             const tickStarted = performance.now()
+            const tickCpuStarted = diagnostics ? process.cpuUsage() : null
+            const tickResourceStarted = diagnostics ? process.resourceUsage() : null
             const fixtureTick = ((tick - 1) % normalized.ticks) + 1
             const records = inputsByFixtureTick.get(fixtureTick) ?? []
 
@@ -323,12 +325,29 @@ export async function runLocalBenchmark({
             record(samples, 'totalTick', totalTickMs)
             if(diagnostics && totalTickMs >= diagnosticThreshold)
             {
+                const cpu = process.cpuUsage(tickCpuStarted)
+                const resourceEnded = process.resourceUsage()
+                const cpuUserMs = cpu.user / 1000
+                const cpuSystemMs = cpu.system / 1000
                 slowTicks.push({
                     tick,
                     fixtureTick,
                     startTimeMs: tickStarted,
                     endTimeMs: tickEnded,
                     totalMs: totalTickMs,
+                    cpuUserMs,
+                    cpuSystemMs,
+                    cpuTotalMs: cpuUserMs + cpuSystemMs,
+                    voluntaryContextSwitchesDelta: Math.max(
+                        0,
+                        resourceEnded.voluntaryContextSwitches
+                            - tickResourceStarted.voluntaryContextSwitches,
+                    ),
+                    involuntaryContextSwitchesDelta: Math.max(
+                        0,
+                        resourceEnded.involuntaryContextSwitches
+                            - tickResourceStarted.involuntaryContextSwitches,
+                    ),
                 })
             }
 
