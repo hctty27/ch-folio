@@ -55,14 +55,15 @@ jobs:
             echo "commit=$(git rev-parse HEAD)"
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
+            echo "production_warmup_ticks=600"
           } > authoritative-node-benchmark-identity.txt
-      - name: Run staging 36000-tick hard gate
+      - name: Run staging production-warmed 36000-tick hard gate
         if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
         id: staging_benchmark
         shell: bash
         run: |
           set +e
-          npm run benchmark:authoritative:local -- \
+          node scripts/benchmark-authoritative-node.mjs \
             --output=authoritative-node-local-benchmark.json
           status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
@@ -75,7 +76,7 @@ jobs:
             echo "commit=$(git rev-parse HEAD)"
             echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "nproc=$(nproc)"
-            echo "warmup_ticks=600"
+            echo "production_warmup_ticks=600"
             echo "=== uptime ==="
             uptime
             echo "=== cpu pressure ==="
@@ -85,32 +86,12 @@ jobs:
           } > authoritative-node-benchmark-scheduler.txt
 
           set +e
-          node --input-type=module <<'NODE'
-          import { writeFile } from 'node:fs/promises'
-          import { runLocalBenchmark } from './scripts/benchmark-authoritative-room.mjs'
-
-          const warmupTicks = 600
-          const warmup = await runLocalBenchmark({ ticks: warmupTicks })
-          const report = await runLocalBenchmark({
-              ticks: 36_000,
-              diagnostics: true,
-              slowTickThresholdMs: 5,
-          })
-          report.diagnostics.processWarmupTicks = warmupTicks
-          report.diagnostics.warmupGate = warmup.gates
-          await writeFile(
-              'authoritative-node-local-benchmark-warmed-diagnostic.json',
-              `${JSON.stringify(report, null, 2)}\n`,
-          )
-          process.stdout.write(`${JSON.stringify({
-              warmup: warmup.phases.totalTick,
-              measured: report.phases.totalTick,
-              gates: report.gates,
-          }, null, 2)}\n`)
-          process.exitCode = report.gates.pass ? 0 : 1
-          NODE
+          node scripts/benchmark-authoritative-node.mjs \
+            --diagnostics \
+            --slow-tick-threshold-ms=5 \
+            --output=authoritative-node-local-benchmark-diagnostic.json
           diagnostic_status=$?
-          echo "warmed_diagnostic_exit_status=${diagnostic_status}" >> authoritative-node-benchmark-scheduler.txt
+          echo "diagnostic_exit_status=${diagnostic_status}" >> authoritative-node-benchmark-scheduler.txt
           exit 0
       - name: Upload staging benchmark evidence
         if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
@@ -119,7 +100,7 @@ jobs:
           name: node-authoritative-local-benchmark
           path: |
             authoritative-node-local-benchmark.json
-            authoritative-node-local-benchmark-warmed-diagnostic.json
+            authoritative-node-local-benchmark-diagnostic.json
             authoritative-node-benchmark-identity.txt
             authoritative-node-benchmark-scheduler.txt
           if-no-files-found: error
