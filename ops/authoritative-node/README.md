@@ -79,6 +79,19 @@ sudo systemctl restart cloudflared
 
 Do not restart the Tunnel during smoke or the 600-second benchmark because existing long-lived WebSocket connections would be interrupted.
 
+## Rootless named-Tunnel acceptance
+
+The repository also contains `.github/workflows/authoritative-node-named-staging.yml`. This is a manual (`workflow_dispatch`) acceptance workflow intended to unblock the public smoke and 600-second load gate before the one-time system service bootstrap is available.
+
+It requires exactly two GitHub repository settings:
+
+- Actions secret `AUTHORITATIVE_STAGING_TUNNEL_TOKEN`: token for a remotely-managed Cloudflare Tunnel.
+- Actions variable `AUTHORITATIVE_STAGING_HOSTNAME`: public hostname already routed by that Tunnel to `http://127.0.0.1:8080`.
+
+The workflow runs `cloudflared` from the runner user account, so it does not require `sudo`. It starts the real Node entrypoint, waits for loopback and public `/healthz`, runs the protocol-v2 WSS smoke, then runs exactly eight clients for exactly 600 seconds. Any public health, smoke, load-test, process-liveness, or hard-gate failure fails the workflow. The generated benchmark token is ephemeral and masked; the Tunnel token comes only from the Actions secret.
+
+This rootless acceptance is evidence for the named-Tunnel public path and 600-second load gate. It does not replace the final systemd/cloudflared service installation required for the persistent staging host.
+
 ## Public validation
 
 After public HTTPS `/healthz` succeeds, run the protocol smoke with the benchmark token inherited from the environment:
