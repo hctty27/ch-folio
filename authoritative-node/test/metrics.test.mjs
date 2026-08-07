@@ -71,6 +71,41 @@ test('benchmark phases zero-fill before a phase first appears', () =>
     })
 })
 
+test('benchmark summary correlates the eight slowest total ticks with same-tick phases', () =>
+{
+    const metrics = new Metrics()
+    for(let tick = 1; tick <= 10; tick++)
+    {
+        metrics.recordPhase('rapierStep', tick / 10)
+        if(tick % 2 === 0)
+            metrics.recordPhase('stateBroadcast', tick / 20)
+        metrics.recordPhase('totalTick', tick)
+        metrics.completeTick(tick)
+    }
+
+    const { slowTicks } = metrics.readBenchmarkSummary()
+    assert.equal(slowTicks.length, 8)
+    assert.deepEqual(slowTicks.map(({ tick }) => tick), [ 10, 9, 8, 7, 6, 5, 4, 3 ])
+    assert.deepEqual(slowTicks[0], {
+        tick: 10,
+        totalMs: 10,
+        phases: {
+            rapierStep: 1,
+            stateBroadcast: 0.5,
+            totalTick: 10,
+        },
+    })
+    assert.deepEqual(slowTicks[1], {
+        tick: 9,
+        totalMs: 9,
+        phases: {
+            rapierStep: 0.9,
+            stateBroadcast: 0,
+            totalTick: 9,
+        },
+    })
+})
+
 test('benchmark ticks must increase strictly', () =>
 {
     const metrics = new Metrics()
@@ -94,6 +129,7 @@ test('benchmark retains only the latest 36000 completed ticks', () =>
     assert.equal(summary.ticks, 36_000)
     assert.equal(summary.phases.totalTick.count, 36_000)
     assert.equal(summary.phases.totalTick.maxMs, 1)
+    assert.equal(summary.slowTicks.some(({ tick }) => tick === 1), false)
 })
 
 test('metrics reject invalid durations and counters', () =>
