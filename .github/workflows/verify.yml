@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'feat/**'
   pull_request:
     branches:
       - main
@@ -16,8 +15,7 @@ permissions:
 
 concurrency:
   group: hk-server-exclusive
-  cancel-in-progress: false
-  queue: max
+  cancel-in-progress: true
 
 jobs:
   test-and-build:
@@ -49,3 +47,37 @@ jobs:
       - run: npm test --prefix multiplayer-worker
       - run: npm run check --prefix multiplayer-worker
       - run: cd multiplayer-worker && npx wrangler deploy --dry-run
+      - name: Record staging benchmark identity
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        shell: bash
+        run: |
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+          } > authoritative-node-benchmark-identity.txt
+      - name: Run staging 36000-tick hard gate
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        id: staging_benchmark
+        shell: bash
+        run: |
+          set +e
+          npm run benchmark:authoritative:local -- \
+            --output=authoritative-node-local-benchmark.json
+          status=$?
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload staging benchmark evidence
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-authoritative-local-benchmark
+          path: |
+            authoritative-node-local-benchmark.json
+            authoritative-node-benchmark-identity.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce staging benchmark hard gate
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
+        shell: bash
+        run: exit "${{ steps.staging_benchmark.outputs.status }}"
