@@ -2,9 +2,6 @@ name: Node Authoritative Named Staging Acceptance
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - feat/authoritative-physics-foundation
 
 permissions:
   contents: read
@@ -22,8 +19,6 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: b6be9b40737622e955aa1f8477febba1c20fad7d
       - uses: actions/setup-node@v4
         with:
           node-version: 24
