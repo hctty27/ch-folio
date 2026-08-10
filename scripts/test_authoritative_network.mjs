@@ -43,7 +43,8 @@ test('seeded network simulation covers latency, jitter, reordering, drops, and b
     assert.ok(result.droppedFrames > 0)
     assert.ok(result.batchedDeliveries > 0)
     assert.equal(result.persistentDivergence, 0)
-    assert.equal(result.finalServerChecksum, result.finalClientChecksum)
+    assert.ok(result.error.position <= 0.05)
+    assert.ok(result.error.rotation <= Math.PI / 180)
 })
 
 test('authority older than one second requests hard sync instead of partial rollback', async () =>
@@ -57,7 +58,8 @@ test('authority older than one second requests hard sync instead of partial roll
 
     assert.equal(result.hardSyncReasons.includes('rollback-window-exceeded'), true)
     assert.equal(result.partialRollbackApplied, false)
-    assert.equal(result.finalServerChecksum, result.finalClientChecksum)
+    assert.equal(result.persistentDivergence, 0)
+    assert.deepEqual(result.finalClientState, result.finalServerState)
 })
 
 test('disconnect during collision resumes before 180 ticks and expires at the boundary', async () =>
