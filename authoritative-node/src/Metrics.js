@@ -205,6 +205,22 @@ export class Metrics extends MetricsBase
         return summary
     }
 
+    resetBenchmark()
+    {
+        this.benchmarkTicks = []
+        this.benchmarkPhases = new Map()
+        this.benchmarkPendingPhases = new Map()
+        this.benchmarkDiagnostics = new Map()
+        this.benchmarkPendingDiagnostics = new Map()
+        this.benchmarkScheduler = this.emptyScheduler()
+        this.benchmarkMaxQueueDepth = this.queueDepth
+        this.benchmarkMaxSlots = this.slots
+        this.benchmarkDisconnects = 0
+        this.benchmarkInputQueueSamples.clear(
+            this.inputQueueDiagnostics?.lateInputCount ?? 0,
+        )
+    }
+
     reset()
     {
         super.reset()
