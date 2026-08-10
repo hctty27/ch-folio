@@ -20,11 +20,11 @@ Visual smoothing cannot remove a rollback that is being triggered repeatedly by 
 - Normal driving at realistic Internet RTT does not produce periodic rollback/correction hitches.
 - Node remains the sole authority for vehicle state, collisions, spawn/despawn, and final outcomes.
 - Keep 60 Hz simulation and 20 Hz STATE broadcast; do not increase network snapshot rate merely to hide timeline bugs.
-- Preserve the existing binary protocol-v2 frame layout where possible.
+- Preserve the existing binary protocol-v2 frame layout.
 - Preserve deterministic Rapier configuration and all vehicle/collision tuning.
 - Remote vehicles render smoothly from authoritative data without forcing local-owner rollback.
 - Collision outcomes remain server-authoritative and converge identically on all clients.
-- Full-sync/resume remains the recovery path for missing history, incompatible state, or large discontinuities.
+- Full-sync/resume remains the recovery path for missing history, incompatible topology, or large discontinuities.
 
 ## Non-goals
 
@@ -46,6 +46,8 @@ The client explicitly maintains:
 
 The server continues to own one monotonic 60 Hz simulation timeline.
 
+All tick arithmetic must use shared uint32 modular helpers (`tickAdd`, `tickDistance`, `tickAfter` / equivalent). New timeline code must not use ordinary numeric `<` / `>` across wrap boundaries.
+
 ### 2. TickSynchronizer
 
 Add `sources/Game/MultiplayerV2/TickSynchronizer.js`.
@@ -64,15 +66,36 @@ Outputs:
 - adaptive command lead in ticks;
 - interpolation target tick.
 
-Initial command lead is conservative so the first commands are queued ahead rather than arriving late. Thereafter the synchronizer maintains an EWMA of acknowledgement RTT and jitter. The desired lead is based on approximately half RTT plus jitter margin and fixed command slack, clamped to a bounded range. If an acknowledgement proves that a command was processed materially later than its expected server application tick, lead increases immediately; it decreases only slowly after a stable period.
+Starting constants, all covered by tests and public trace metrics:
 
-The synchronizer must never teleport the local prediction clock to chase small timing drift. `AuthoritativeMultiplayer.update()` may catch up by the existing bounded number of fixed ticks or briefly stop advancing when it is ahead. Large clock discontinuities request full sync.
+- simulation tick: 60 Hz;
+- STATE cadence: 20 Hz / every 3 simulation ticks;
+- initial command lead: 8 ticks;
+- minimum command lead: 4 ticks;
+- maximum command lead: 18 ticks;
+- fixed safety slack: 2 ticks;
+- RTT EWMA alpha: 0.125;
+- jitter EWMA alpha: 0.25;
+- jitter margin: 2x smoothed jitter;
+- initial remote interpolation delay: 6 ticks (100 ms), bounded between 6 and 12 ticks.
+
+After enough acknowledgement samples, desired lead is:
+
+`ceil((0.5 * smoothedRTT + 2 * smoothedJitter) / fixedDt) + safetySlack`
+
+clamped to the configured lead bounds.
+
+If an acknowledgement proves a command was processed materially later than its expected server application tick, lead increases immediately. Lead decreases by at most one tick after a stable multi-second interval; it must not oscillate packet-by-packet.
+
+The synchronizer must never teleport the local prediction clock to chase small timing drift. `AuthoritativeMultiplayer.update()` may catch up by the existing maximum three fixed ticks per render frame or briefly stop advancing when it is ahead. A clock error larger than the rollback/history recovery window requests full sync.
+
+After FULL_SYNC and before entering ACTIVE rendering, the client fast-forwards from the authoritative sync tick to the current desired predicted tick using safe/local retained commands without rendering intermediate states. This avoids starting gameplay several ticks behind the intended prediction timeline.
 
 ### 3. Preserve the existing wire layout
 
-Do not bump protocol-v2 solely for this change.
+Do not bump protocol-v2 for this change.
 
-The existing 32-bit `input.clientTick` field remains on the wire, but its client-side meaning becomes the server input timeline tick, not the browser's independent local tick.
+The existing 32-bit `input.clientTick` field remains on the wire, but client code treats it as `commandTick`: the server input timeline tick, not the browser's independent local fixed-step tick. Codec byte layout remains unchanged.
 
 The server currently consumes:
 
@@ -83,6 +106,8 @@ with `INPUT_BUFFER_TICKS = 3`.
 Therefore, when the client predicts physical simulation tick `P`, the command used for that step is serialized with:
 
 `commandTick = P - INPUT_BUFFER_TICKS`
+
+using uint32 modular subtraction.
 
 The local history records both values explicitly:
 
@@ -97,13 +122,13 @@ This keeps the current binary codec and server's three-tick deterministic buffer
 
 For each sample it:
 
-1. computes `commandTick = predictionTick - 3`;
+1. computes `commandTick = predictionTick - 3` with wrap-safe arithmetic;
 2. captures/quantizes player input immediately;
 3. records `{ entityOrder, predictionTick, input }` in reconciliation history;
 4. serializes `commandTick` into the existing `input.clientTick` field;
 5. tracks `sentAt` for each sequence when the containing batch is successfully sent.
 
-Batching remains at three simulation samples / maximum six records unless tests prove it creates avoidable command lateness. Batching is not changed as the first lever.
+Batching remains at three simulation samples / maximum six records unless measured tests prove it creates avoidable command lateness. Batching is not changed as the first lever.
 
 ### 5. Server late-input behavior becomes a safety path
 
@@ -115,7 +140,12 @@ The server continues counting late inputs. New diagnostics distinguish:
 - stale/late commands;
 - persistent unconsumed backlog.
 
-The old expectation that raw queue depth must always be zero is no longer a valid health criterion once clients intentionally send commands ahead. The gate becomes: future lead is bounded, stale backlog is zero, and queued commands never grow beyond the configured lead window.
+The old expectation that raw queue depth must always be zero is no longer a valid health criterion once clients intentionally send commands ahead. It is replaced, not removed:
+
+- stale/past-due queued commands: 0 after each consume step;
+- future command lead per slot: never above `MAX_COMMAND_LEAD_TICKS + MAX_BATCH_INPUTS`;
+- persistent queue growth across successive samples: 0;
+- late-input rate after synchronizer convergence: target 0, hard acceptance bound defined from the pre-production trace before cutover.
 
 No gate is removed without a replacement bound.
 
@@ -125,7 +155,9 @@ The local owner's vehicle is the only vehicle whose gameplay motion is predicted
 
 Remote vehicles are not used as a reason to rollback the local owner. Their authoritative STATE samples feed render-only snapshot buffers.
 
-For the first implementation, local PredictionWorld should not depend on unknown live remote inputs. The simplest acceptable model is local vehicle + authoritative map/static collision. Vehicle-to-vehicle collision remains decided by the Node simulation. When a server collision materially changes the local owner's state, local reconciliation applies that authoritative result and replays unacknowledged local commands.
+For the first implementation, local `PredictionWorld` contains the local vehicle plus authoritative static map collision only. Remote spawn/despawn remains tracked by the multiplayer lifecycle/visual layer but remote dynamic vehicles are not simulated from guessed inputs inside the local owner's prediction world.
+
+Vehicle-to-vehicle collision remains decided by the Node simulation. When a server collision materially changes the local owner's state, local reconciliation applies that authoritative result and replays unacknowledged local commands.
 
 A future kinematic remote collision proxy is explicitly out of scope until the base owner-predicted path is smooth and measured.
 
@@ -135,9 +167,9 @@ Add one bounded snapshot buffer per remote entity in `VehicleVisuals` or a dedic
 
 Each authoritative STATE inserts remote position, quaternion, linear/angular velocity, wheel/contact/controller visual fields, and server tick.
 
-Rendering uses an `interpolationTick` behind the latest estimated server time. The initial interpolation delay is based on at least two 20 Hz STATE intervals and is adjusted slowly from observed jitter. Normal rendering interpolates only between already received states. Very short bounded extrapolation is allowed only when the next sample is missing; otherwise hold the latest state.
+Rendering uses an `interpolationTick` behind the latest estimated server time. It starts at a 6-tick / 100 ms delay and may adapt slowly up to 12 ticks from observed jitter. Normal rendering interpolates only between already received states. Very short extrapolation is bounded to at most one STATE interval (3 simulation ticks); beyond that, hold the latest received state until new authority arrives.
 
-Remote interpolation never mutates PredictionWorld and never triggers local-owner reconciliation.
+Remote interpolation never mutates PredictionWorld and never triggers local-owner reconciliation. Spawn/despawn clears only the affected entity buffer.
 
 ### 8. Local reconciliation is entity-scoped
 
@@ -150,11 +182,11 @@ For every authoritative STATE, `Reconciler`:
 3. compares local position, rotation, linear velocity, and angular velocity against the authoritative local state;
 4. ignores tiny error inside strict tolerances;
 5. performs rollback/replay only when local error exceeds the soft threshold;
-6. snaps or requests full sync only for hard discontinuity / missing history / incompatible topology.
+6. snaps or requests full sync only for hard discontinuity, missing local history, or incompatible topology.
 
-The whole-world hash/checksum is retained for diagnostics, deterministic benchmark evidence, and hard-sync integrity checks. It does not force owner rollback merely because a remote vehicle differs.
+Once prediction becomes local-owner-only, the browser no longer owns an equivalent full dynamic world and therefore must not force full sync from a client-computed whole-world hash mismatch. Whole-world checksum/hash remains on the server and in deterministic fixtures/benchmark evidence. Client protocol validation, entity topology, full-sync structure, and authoritative local-state validation remain fail-closed.
 
-Initial thresholds are constants covered by tests and tuned from measured public traces, not visual guesswork. Proposed starting bounds:
+Initial thresholds are constants covered by tests and tuned from measured public traces, not visual guesswork:
 
 - soft position error: 0.05 m;
 - soft rotation error: 1 degree;
@@ -188,7 +220,7 @@ A successful steady-state drive should show zero periodic correction cadence.
 
 ### Local owner
 
-`keyboard/gamepad -> sample immediate input -> predictionTick P -> commandTick P-3 -> local PredictionWorld step -> batch command -> Node queue -> Node physical tick P -> STATE@P -> local error check -> normally confirm only`
+`keyboard/gamepad -> immediate input -> predictionTick P -> commandTick P-3 -> local PredictionWorld step -> batch command -> Node queue -> Node physical tick P -> STATE@P -> entity-scoped local error check -> normally confirm only`
 
 ### Remote player
 
@@ -216,10 +248,11 @@ Do not remove the current late-input safety path during the initial rollout.
 ### A. Tick synchronization unit tests
 
 - server tick estimate advances at 60 Hz between STATE frames;
-- RTT/jitter increases command lead within a fixed upper bound;
+- RTT/jitter increases command lead within the 4..18 tick bound;
 - stable low RTT decreases lead slowly, never oscillating every packet;
+- FULL_SYNC fast-forward reaches desired predicted tick without rendering intermediate states;
 - future/past discontinuity beyond the recovery window requests full sync;
-- 32-bit tick wrap remains correct.
+- 32-bit tick wrap uses modular ordering correctly.
 
 ### B. Command mapping tests
 
@@ -261,6 +294,7 @@ Required normal-driving outcome:
 - remote snapshot insertion is ordered and bounded;
 - 20 Hz samples render smooth 60+ Hz motion at the interpolation timeline;
 - jitter does not cause reverse time / visible snap;
+- extrapolation never exceeds 3 simulation ticks;
 - remote interpolation never mutates PredictionWorld;
 - entity spawn/despawn clears only that entity's snapshot buffer.
 
@@ -271,7 +305,7 @@ Required normal-driving outcome:
 - local error over soft threshold rolls back and replays by `predictionTick`;
 - collision-sized error applies authoritative local state and converges;
 - missing rollback history requests full sync;
-- whole-world hash mismatch remains observable but is not a normal local-owner rollback trigger unless accompanied by integrity/full-sync criteria.
+- remote whole-world divergence does not force local-owner rollback.
 
 ### F. Public driving gate
 
@@ -286,17 +320,18 @@ Collect at least:
 - hard-sync count;
 - correction distance/angle distribution;
 - remote interpolation buffer depth;
+- future command queue lead/depth;
 - disconnect/backlog/divergence existing metrics.
 
 Acceptance:
 
 - local input response is same-frame;
 - sustained normal driving has no recurring hitch cadence;
-- no persistent backlog;
-- no unbounded command lead;
+- no stale/persistent backlog;
+- command lead remains within configured bounds;
 - no periodic rollback in collision-free driving;
 - both clients converge on the same authoritative collision outcome;
-- existing 8-client/600 s performance hard gates remain green under the revised bounded-future-queue semantics.
+- existing 8-client/600 s timing, disconnect, determinism and overload gates remain green, with the raw queue-depth-zero check replaced by bounded-future-queue plus zero-stale-backlog checks.
 
 ## Rollback
 
@@ -316,12 +351,16 @@ Smoothing masks visible discontinuity but still leaves repeated rollback/replay 
 
 ### Why owner prediction instead of predicting all vehicles?
 
-The client has immediate local input but not every remote player's live command stream. Predicting remote dynamic vehicles from missing/stale commands creates avoidable whole-world divergence. Remote interpolation is deterministic from received snapshots and isolates remote jitter from local controls.
+The client has immediate local input but not every remote player's live command stream. Predicting remote dynamic vehicles from missing/stale commands creates avoidable whole-world divergence. Remote interpolation isolates remote jitter from local controls and keeps the server authoritative for vehicle-to-vehicle collision.
 
 ### Why preserve the three-tick server input buffer?
 
 It is already part of the validated deterministic server timeline and provides a small jitter cushion. Align the client's command label to that timeline instead of deleting the buffer and changing collision timing at the same time.
 
+### Collision trade-off
+
+Without speculative remote collision proxies, the local owner can learn about a vehicle-to-vehicle impact only when Node authority returns it. This deliberately trades speculative immediate collision response for stable normal driving and exact server authority. The public two-client collision gate decides whether a later kinematic proxy phase is necessary; it is not bundled into this redesign by default.
+
 ## External Design Basis
 
-This design follows the established server-authoritative prediction model where a client predicts ahead of the server by command slack, sends tick-associated commands before the server reaches that tick, rolls back/replays from authoritative snapshots when required, and uses owner prediction for the local player while interpolating non-owned entities. The repository implementation remains custom and does not add Unity or another networking runtime dependency.
+The architecture follows the established server-authoritative prediction model where a client predicts ahead of the server by command slack, sends tick-associated commands before the server reaches the corresponding simulation point, rolls back/replays from authoritative snapshots only when needed, and uses owner prediction for the local player while interpolating non-owned entities. The repository implementation remains custom and adds no Unity or other networking runtime dependency.
