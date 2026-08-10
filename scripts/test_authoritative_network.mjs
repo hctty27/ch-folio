@@ -59,7 +59,7 @@ test('authority older than one second requests hard sync instead of partial roll
     assert.equal(result.hardSyncReasons.includes('rollback-window-exceeded'), true)
     assert.equal(result.partialRollbackApplied, false)
     assert.equal(result.persistentDivergence, 0)
-    assert.deepEqual(result.finalClientState, result.finalServerState)
+    assert.deepEqual(result.clientState, result.serverState)
 })
 
 test('disconnect during collision resumes before 180 ticks and expires at the boundary', async () =>
