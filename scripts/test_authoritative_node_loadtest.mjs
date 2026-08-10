@@ -140,12 +140,18 @@ test('FrameRouter retains one-shot frames that arrive before waitFor', async () 
     assert.equal(received, expected)
 })
 
-test('Node hosted gates pass at exact limits and do not treat RSS as the Durable Object 96 MiB gate', () =>
+test('Node hosted gates pass at exact limits and allow bounded future queue depth', () =>
 {
     const report = {
         server: {
             phases: { totalTick: { p95Ms: 8, p99Ms: 12, maxMs: 16.67 } },
-            gauges: { maxQueueDepth: 3 },
+            gauges: {
+                maxQueueDepth: 100,
+                futureInputCountMax: 100,
+                futureLeadMaxTicks: 18,
+                staleInputMax: 0,
+                persistentFutureQueueGrowth: false,
+            },
             scheduler: { overloadCallbacks: 0 },
             observedPeakMemoryBytes: 512 * 1024 * 1024,
         },
@@ -160,12 +166,18 @@ test('Node hosted gates pass at exact limits and do not treat RSS as the Durable
     assert.deepEqual(result.failures, [])
 })
 
-test('Node hosted gates reject every timing, queue, overload, disconnect, backlog, divergence, and restart breach', () =>
+test('Node hosted gates reject timing, stale queue, lead, growth, overload, disconnect, backlog, divergence, and restart breaches', () =>
 {
     const report = {
         server: {
             phases: { totalTick: { p95Ms: 8.01, p99Ms: 12.01, maxMs: 16.68 } },
-            gauges: { maxQueueDepth: 4 },
+            gauges: {
+                maxQueueDepth: 100,
+                futureInputCountMax: 100,
+                futureLeadMaxTicks: 19,
+                staleInputMax: 1,
+                persistentFutureQueueGrowth: true,
+            },
             scheduler: { overloadCallbacks: 1 },
             observedPeakMemoryBytes: 1024 * 1024 * 1024,
         },
@@ -181,12 +193,15 @@ test('Node hosted gates reject every timing, queue, overload, disconnect, backlo
         'server.totalTick.p95Ms',
         'server.totalTick.p99Ms',
         'server.totalTick.maxMs',
-        'server.gauges.maxQueueDepth',
+        'server.gauges.staleInputMax',
+        'server.gauges.futureLeadMaxTicks',
+        'server.gauges.persistentFutureQueueGrowth',
         'server.scheduler.overloadCallbacks',
         'disconnects',
         'backlog.persistent',
         'divergence.persistent',
         'roomRestarts',
     ])
+    assert.equal(result.failures.some(({ gate }) => gate.includes('maxQueueDepth')), false)
     assert.equal(result.failures.some(({ gate }) => gate.includes('memory')), false)
 })
