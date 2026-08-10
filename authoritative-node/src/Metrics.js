@@ -86,10 +86,9 @@ export class Metrics extends MetricsBase
     {
         const enabled = this.inputQueueDiagnosticsEnabled
         const sample = enabled ? { ...this.inputQueueDiagnostics } : null
-        const windowSamples = enabled
-            ? [ ...this.windowInputQueueSamples, sample ]
-            : null
-        const windowLateInputBaseline = this.windowLateInputBaseline
+        if(enabled)
+            this.windowInputQueueSamples.push(sample)
+
         const summary = super.completeTick(tick)
 
         if(!enabled)
@@ -103,9 +102,16 @@ export class Metrics extends MetricsBase
         }
 
         if(summary)
-            Object.assign(summary.gauges, queueGauges(windowSamples, windowLateInputBaseline))
-        else
-            this.windowInputQueueSamples.push(sample)
+        {
+            Object.assign(
+                summary.gauges,
+                queueGauges(
+                    this.completedWindowInputQueueSamples ?? [],
+                    this.completedWindowLateInputBaseline,
+                ),
+            )
+            this.completedWindowInputQueueSamples = null
+        }
         return summary
     }
 
@@ -139,11 +145,17 @@ export class Metrics extends MetricsBase
         this.benchmarkLateInputBaseline = 0
         this.windowInputQueueSamples = []
         this.windowLateInputBaseline = 0
+        this.completedWindowInputQueueSamples = null
+        this.completedWindowLateInputBaseline = 0
     }
 
     resetWindow()
     {
+        const completedSamples = this.windowInputQueueSamples ?? []
+        const completedLateInputBaseline = this.windowLateInputBaseline ?? 0
         super.resetWindow()
+        this.completedWindowInputQueueSamples = completedSamples
+        this.completedWindowLateInputBaseline = completedLateInputBaseline
         this.windowInputQueueSamples = []
         this.windowLateInputBaseline = this.inputQueueDiagnostics?.lateInputCount ?? 0
     }
