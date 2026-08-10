@@ -1,11 +1,16 @@
+import { PredictionInputHistory } from './PredictionInputHistory.js'
 import {
-    CheckpointRing,
-    InputHistory,
-    hashWorldSnapshot,
-} from '@ch-folio/authoritative-physics'
+    tickAdd,
+    tickAfter,
+    tickDelta,
+} from './TickMath.js'
 
 const DEFAULT_MAX_ROLLBACK_TICKS = 60
 const DEFAULT_CHECKPOINT_INTERVAL_TICKS = 2
+const SOFT_POSITION_METERS = 0.05
+const SOFT_ROTATION_RADIANS = Math.PI / 180
+const SOFT_LINEAR_VELOCITY = 0.25
+const SOFT_ANGULAR_VELOCITY = 0.10
 
 function integer(value, minimum, maximum, label)
 {
@@ -31,30 +36,122 @@ function eventKey(event)
     return `${event.tick}:${event.type}:${event.entityOrder}:${event.spawnIndex}:${event.flags}:${event.value}`
 }
 
-function bytesEqual(left, right)
+function vectorDistance(left, right)
 {
-    if(!(left instanceof Uint8Array) || !(right instanceof Uint8Array))
-        return false
-    if(left.byteLength !== right.byteLength)
-        return false
-
-    for(let index = 0; index < left.byteLength; index++)
+    if(!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length)
+        return Number.POSITIVE_INFINITY
+    let squared = 0
+    for(let index = 0; index < left.length; index++)
     {
-        if(left[index] !== right[index])
-            return false
+        const delta = Number(left[index]) - Number(right[index])
+        if(!Number.isFinite(delta))
+            return Number.POSITIVE_INFINITY
+        squared += delta * delta
     }
-    return true
+    return Math.sqrt(squared)
 }
 
-function groupInputsByTick(records)
+function quaternionAngle(left, right)
+{
+    if(!Array.isArray(left) || !Array.isArray(right) || left.length !== 4 || right.length !== 4)
+        return Number.POSITIVE_INFINITY
+
+    let dot = 0
+    let leftLength = 0
+    let rightLength = 0
+    for(let index = 0; index < 4; index++)
+    {
+        const a = Number(left[index])
+        const b = Number(right[index])
+        if(!Number.isFinite(a) || !Number.isFinite(b))
+            return Number.POSITIVE_INFINITY
+        dot += a * b
+        leftLength += a * a
+        rightLength += b * b
+    }
+    if(leftLength <= Number.EPSILON || rightLength <= Number.EPSILON)
+        return Number.POSITIVE_INFINITY
+
+    const normalizedDot = Math.abs(dot / Math.sqrt(leftLength * rightLength))
+    return 2 * Math.acos(Math.min(1, Math.max(-1, normalizedDot)))
+}
+
+function copyPhysicalState(state)
+{
+    if(!state)
+        return null
+    return {
+        entityOrder: Number(state.entityOrder),
+        position: [ ...state.position ],
+        quaternion: [ ...state.quaternion ],
+        linearVelocity: [ ...state.linearVelocity ],
+        angularVelocity: [ ...state.angularVelocity ],
+        lastConfirmedSequence: Number(state.lastConfirmedSequence ?? 0) >>> 0,
+    }
+}
+
+export function localError(predicted, authoritative)
+{
+    if(!predicted || !authoritative)
+    {
+        return {
+            position: Number.POSITIVE_INFINITY,
+            rotation: Number.POSITIVE_INFINITY,
+            linearVelocity: Number.POSITIVE_INFINITY,
+            angularVelocity: Number.POSITIVE_INFINITY,
+        }
+    }
+
+    return {
+        position: vectorDistance(predicted.position, authoritative.position),
+        rotation: quaternionAngle(predicted.quaternion, authoritative.quaternion),
+        linearVelocity: vectorDistance(
+            predicted.linearVelocity,
+            authoritative.linearVelocity,
+        ),
+        angularVelocity: vectorDistance(
+            predicted.angularVelocity,
+            authoritative.angularVelocity,
+        ),
+    }
+}
+
+function insideSoftThresholds(error)
+{
+    return (
+        error.position <= SOFT_POSITION_METERS
+        && error.rotation <= SOFT_ROTATION_RADIANS
+        && error.linearVelocity <= SOFT_LINEAR_VELOCITY
+        && error.angularVelocity <= SOFT_ANGULAR_VELOCITY
+    )
+}
+
+function normalizePredictionRecord(record, fallbackPredictionTick)
+{
+    if(!record || !Number.isInteger(record.entityOrder) || !record.input)
+        throw new TypeError('prediction input record must contain entityOrder and input')
+    return {
+        predictionTick: Number(record.predictionTick ?? fallbackPredictionTick) >>> 0,
+        entityOrder: record.entityOrder,
+        input: record.input,
+    }
+}
+
+function groupedPredictionInputs(records, startTick, endTick)
 {
     const grouped = new Map()
     for(const record of records)
     {
-        const tick = record.input.clientTick >>> 0
-        const bucket = grouped.get(tick) ?? []
-        bucket.push(record)
-        grouped.set(tick, bucket)
+        if(!tickAfter(record.predictionTick, startTick))
+            continue
+        if(tickAfter(record.predictionTick, endTick))
+            continue
+        const bucket = grouped.get(record.predictionTick) ?? []
+        bucket.push({
+            entityOrder: record.entityOrder,
+            input: record.input,
+        })
+        grouped.set(record.predictionTick, bucket)
     }
     return grouped
 }
@@ -74,13 +171,10 @@ export class Reconciler
         if(!predictionWorld || typeof predictionWorld.step !== 'function')
             throw new TypeError('Reconciler requires a prediction world')
         for(const method of [
-            'checksum',
-            'createCheckpoint',
-            'restoreCheckpoint',
-            'applyStateFrame',
+            'readState',
+            'applyLocalAuthoritativeState',
             'captureFullSync',
             'restoreFullSync',
-            'readState',
         ])
         {
             if(typeof predictionWorld[method] !== 'function')
@@ -106,14 +200,21 @@ export class Reconciler
         this.acknowledgeInput = acknowledgeInput
         this.reconcileVisuals = reconcileVisuals
 
-        this.checkpoints = new CheckpointRing(
-            Math.ceil(this.maxRollbackTicks / this.checkpointIntervalTicks) + 1,
-        )
-        this.inputs = new InputHistory(this.maxRollbackTicks)
+        this.inputs = new PredictionInputHistory(this.maxRollbackTicks)
         this.eventsByTick = new Map()
-        this.checksums = new Map()
+        this.predictedLocalStates = new Map()
         this.lastAuthoritativeTick = null
+        this.lastAuthoritativeDiagnostics = null
+        this.rollbackCount = 0
+        this.hardSyncCount = 0
         this.destroyed = false
+
+        if(typeof this.predictionWorld.setLocalEntityOrder === 'function')
+        {
+            this.predictionWorld.setLocalEntityOrder(this.localEntityOrder)
+            if(typeof this.predictionWorld.retainLocalEntity === 'function')
+                this.predictionWorld.retainLocalEntity()
+        }
     }
 
     assertActive()
@@ -122,12 +223,12 @@ export class Reconciler
             throw new Error('Reconciler has been destroyed')
     }
 
-    recordInputs(records)
+    recordInputs(records, fallbackPredictionTick = tickAdd(this.predictionWorld.tick, 1))
     {
         if(!Array.isArray(records))
             throw new TypeError('inputs must be an array')
-        for(const record of records)
-            this.inputs.push(record)
+        for(const source of records)
+            this.inputs.push(normalizePredictionRecord(source, fallbackPredictionTick))
     }
 
     recordEvents(events)
@@ -137,6 +238,8 @@ export class Reconciler
 
         for(const source of events)
         {
+            if(source?.entityOrder !== this.localEntityOrder)
+                continue
             const event = copyEvent(source)
             const bucket = this.eventsByTick.get(event.tick) ?? new Map()
             bucket.set(eventKey(event), event)
@@ -144,12 +247,17 @@ export class Reconciler
         }
     }
 
-    predict({ inputs = [], events = [] } = {})
+    predict({ predictionTick = tickAdd(this.predictionWorld.tick, 1), inputs = [], events = [] } = {})
     {
         this.assertActive()
-        this.recordInputs(inputs)
+        const targetTick = Number(predictionTick) >>> 0
+        const records = inputs.map((record) => normalizePredictionRecord(record, targetTick))
+        this.recordInputs(records, targetTick)
         this.recordEvents(events)
-        const tick = this.predictionWorld.step({ inputs, events })
+        const tick = this.predictionWorld.step({
+            inputs: records.map(({ entityOrder, input }) => ({ entityOrder, input })),
+            events: events.filter((event) => event?.entityOrder === this.localEntityOrder),
+        })
         this.captureTick()
         return tick
     }
@@ -158,20 +266,20 @@ export class Reconciler
     {
         this.assertActive()
         const tick = this.predictionWorld.tick >>> 0
-        this.checksums.set(tick, this.predictionWorld.checksum())
+        const local = this.predictionWorld.readState(this.localEntityOrder)
+        if(local)
+            this.predictedLocalStates.set(tick, copyPhysicalState(local))
 
-        if(tick % this.checkpointIntervalTicks === 0)
-            this.checkpoints.push(this.predictionWorld.createCheckpoint())
-
-        const oldest = Math.max(0, tick - this.maxRollbackTicks)
-        for(const storedTick of this.checksums.keys())
+        for(const storedTick of this.predictedLocalStates.keys())
         {
-            if(storedTick < oldest)
-                this.checksums.delete(storedTick)
+            const age = tickDelta(tick, storedTick)
+            if(age > this.maxRollbackTicks)
+                this.predictedLocalStates.delete(storedTick)
         }
         for(const storedTick of this.eventsByTick.keys())
         {
-            if(storedTick < oldest)
+            const age = tickDelta(tick, storedTick)
+            if(age > this.maxRollbackTicks)
                 this.eventsByTick.delete(storedTick)
         }
         return tick
@@ -179,7 +287,7 @@ export class Reconciler
 
     eventsAt(tick)
     {
-        return [ ...(this.eventsByTick.get(tick)?.values() ?? []) ]
+        return [ ...(this.eventsByTick.get(Number(tick) >>> 0)?.values() ?? []) ]
     }
 
     acknowledgeFrame(frame)
@@ -189,60 +297,57 @@ export class Reconciler
             return null
 
         const confirmed = Number(local.lastConfirmedSequence) >>> 0
-        this.acknowledgeInput((confirmed + 1) >>> 0)
+        const nextSequence = (confirmed + 1) >>> 0
+        this.inputs.acknowledge(nextSequence)
+        this.acknowledgeInput(nextSequence)
         return confirmed
     }
 
-    hardSyncRequest(reason, serverTick, currentTick)
+    hardSyncRequest(reason, serverTick, currentTick, error = null)
     {
+        this.hardSyncCount++
         this.requestFullSync(reason)
         return {
             status: 'hard-sync-requested',
             reason,
             serverTick,
             currentTick,
+            rolledBack: false,
+            replayedTicks: 0,
+            error,
         }
-    }
-
-    async verifyWorldHash(worldHash)
-    {
-        if(worldHash === null || worldHash === undefined)
-            return true
-
-        const hashTick = Number(worldHash.hashTick) >>> 0
-        const checkpoint = this.checkpoints.findAtOrBefore(hashTick)
-        if(!checkpoint || checkpoint.tick !== hashTick)
-            return true
-
-        const localHash = await hashWorldSnapshot(checkpoint.snapshot)
-        return bytesEqual(localHash, worldHash.sha256)
     }
 
     resetTimeline()
     {
-        this.checkpoints.clear()
-        this.checksums.clear()
+        this.predictedLocalStates.clear()
+        this.eventsByTick.clear()
     }
 
-    replayRange(startTick, endTick)
+    replayPredictionTicks(startTick, endTick)
     {
-        if(endTick <= startTick)
+        const tickCount = tickDelta(endTick, startTick)
+        if(tickCount <= 0)
             return 0
+        if(tickCount > this.maxRollbackTicks)
+            throw new RangeError('prediction replay exceeds rollback window')
 
-        const groupedInputs = groupInputsByTick(this.inputs.after(startTick))
-        let replayedTicks = 0
-
-        for(let tick = startTick + 1; tick <= endTick; tick++)
+        const grouped = groupedPredictionInputs(
+            this.inputs.afterPredictionTick(startTick),
+            startTick,
+            endTick,
+        )
+        let tick = startTick >>> 0
+        for(let index = 0; index < tickCount; index++)
         {
+            tick = tickAdd(tick, 1)
             this.predictionWorld.step({
-                inputs: groupedInputs.get(tick) ?? [],
+                inputs: grouped.get(tick) ?? [],
                 events: this.eventsAt(tick),
             })
             this.captureTick()
-            replayedTicks++
         }
-
-        return replayedTicks
+        return tickCount
     }
 
     async reconcileState(frame)
@@ -253,40 +358,44 @@ export class Reconciler
 
         const serverTick = Number(frame.serverTick) >>> 0
         const currentTick = this.predictionWorld.tick >>> 0
-
-        if(this.lastAuthoritativeTick !== null && serverTick <= this.lastAuthoritativeTick)
+        if(
+            this.lastAuthoritativeTick !== null
+            && !tickAfter(serverTick, this.lastAuthoritativeTick)
+        )
         {
             return {
                 status: 'stale',
                 serverTick,
                 currentTick,
                 rolledBack: false,
+                replayedTicks: 0,
+                error: null,
             }
         }
 
-        if(serverTick > currentTick)
+        if(tickAfter(serverTick, currentTick))
             return this.hardSyncRequest('future-authoritative-state', serverTick, currentTick)
 
         this.recordEvents(frame.events)
-        if(!await this.verifyWorldHash(frame.worldHash))
-            return this.hardSyncRequest('world-hash-mismatch', serverTick, currentTick)
-
-        this.acknowledgeFrame(frame)
-        const localChecksum = this.checksums.get(serverTick)
-        if(localChecksum === (Number(frame.checksum32) >>> 0))
-        {
-            this.lastAuthoritativeTick = serverTick
-            return {
-                status: 'confirmed',
-                serverTick,
-                currentTick,
-                rolledBack: false,
-            }
+        this.lastAuthoritativeDiagnostics = {
+            serverTick,
+            checksum32: Number(frame.checksum32) >>> 0,
+            worldHash: frame.worldHash ?? null,
         }
 
+        const authoritativeLocal = frame.states.find(
+            (state) => state.entityOrder === this.localEntityOrder,
+        )
+        if(!authoritativeLocal)
+            return this.hardSyncRequest('local-authoritative-state-missing', serverTick, currentTick)
+
+        this.acknowledgeFrame(frame)
+        const age = tickDelta(currentTick, serverTick)
+        const predictedLocal = this.predictedLocalStates.get(serverTick)
         if(
-            currentTick - serverTick > this.maxRollbackTicks
-            || localChecksum === undefined
+            age < 0
+            || age > this.maxRollbackTicks
+            || predictedLocal === undefined
         )
         {
             return this.hardSyncRequest(
@@ -296,53 +405,59 @@ export class Reconciler
             )
         }
 
-        const baseTick = Math.max(0, serverTick - 1)
-        const baseCheckpoint = this.checkpoints.findAtOrBefore(baseTick)
-        if(!baseCheckpoint)
+        const error = localError(predictedLocal, authoritativeLocal)
+        if(insideSoftThresholds(error))
         {
-            return this.hardSyncRequest(
-                'rollback-checkpoint-unavailable',
+            this.lastAuthoritativeTick = serverTick
+            return {
+                status: 'confirmed',
                 serverTick,
                 currentTick,
-            )
+                rolledBack: false,
+                replayedTicks: 0,
+                error,
+            }
         }
 
         const backup = this.predictionWorld.captureFullSync()
         const before = this.predictionWorld.readState()
-
         try
         {
-            this.predictionWorld.restoreCheckpoint(baseCheckpoint)
-            this.resetTimeline()
-            this.captureTick()
-            this.replayRange(baseCheckpoint.tick, baseTick)
-            this.predictionWorld.applyStateFrame(frame)
-            if(this.predictionWorld.checksum() !== (Number(frame.checksum32) >>> 0))
-                throw new Error('authoritative state checksum did not round-trip')
+            this.predictionWorld.applyLocalAuthoritativeState(authoritativeLocal, serverTick)
+            this.predictedLocalStates.set(
+                serverTick,
+                copyPhysicalState(this.predictionWorld.readState(this.localEntityOrder)),
+            )
+            for(const storedTick of this.predictedLocalStates.keys())
+            {
+                if(tickAfter(storedTick, serverTick) && !tickAfter(storedTick, currentTick))
+                    this.predictedLocalStates.delete(storedTick)
+            }
 
-            this.captureTick()
-            const replayedTicks = this.replayRange(serverTick, currentTick)
+            const replayedTicks = this.replayPredictionTicks(serverTick, currentTick)
             const after = this.predictionWorld.readState()
             this.reconcileVisuals(before, after, {
                 hard: false,
                 serverTick,
                 currentTick,
             })
+            this.rollbackCount++
             this.lastAuthoritativeTick = serverTick
-
             return {
                 status: 'rolled-back',
                 serverTick,
                 currentTick,
+                rolledBack: true,
                 replayedTicks,
+                error,
             }
         }
-        catch(error)
+        catch
         {
             this.predictionWorld.restoreFullSync(backup)
             this.resetTimeline()
             this.captureTick()
-            return this.hardSyncRequest('rollback-failed', serverTick, currentTick)
+            return this.hardSyncRequest('rollback-failed', serverTick, currentTick, error)
         }
     }
 
@@ -354,27 +469,25 @@ export class Reconciler
         const serverTick = Number(sync?.serverTick) >>> 0
 
         this.predictionWorld.restoreFullSync(sync)
-        this.recordInputs(sync.queuedInputs ?? [])
-        this.resetTimeline()
-        this.captureTick()
-
-        while(this.predictionWorld.tick < serverTick)
-        {
-            this.predictionWorld.step({ events: this.eventsAt(this.predictionWorld.tick + 1) })
-            this.captureTick()
-        }
-
-        const currentTick = Math.max(previousTick, serverTick)
-        const replayedTicks = this.replayRange(serverTick, currentTick)
         const descriptor = sync.entities?.find(
             (entity) => entity.entityOrder === this.localEntityOrder,
         )
         if(descriptor)
         {
             const confirmed = Number(descriptor.lastConfirmedSequence) >>> 0
-            this.acknowledgeInput((confirmed + 1) >>> 0)
+            const nextSequence = (confirmed + 1) >>> 0
+            this.inputs.acknowledge(nextSequence)
+            this.acknowledgeInput(nextSequence)
         }
 
+        this.resetTimeline()
+        this.captureTick()
+        let replayedTicks = 0
+        const ticksToReplay = tickDelta(previousTick, serverTick)
+        if(ticksToReplay > 0 && ticksToReplay <= this.maxRollbackTicks)
+            replayedTicks = this.replayPredictionTicks(serverTick, previousTick)
+
+        const currentTick = this.predictionWorld.tick >>> 0
         const after = this.predictionWorld.readState()
         this.reconcileVisuals(before, after, {
             hard: true,
@@ -387,7 +500,9 @@ export class Reconciler
             status: 'hard-synced',
             serverTick,
             currentTick,
+            rolledBack: false,
             replayedTicks,
+            error: null,
         }
     }
 
@@ -397,9 +512,8 @@ export class Reconciler
             return
 
         this.destroyed = true
-        this.checkpoints.clear()
         this.inputs.clear()
         this.eventsByTick.clear()
-        this.checksums.clear()
+        this.predictedLocalStates.clear()
     }
 }
