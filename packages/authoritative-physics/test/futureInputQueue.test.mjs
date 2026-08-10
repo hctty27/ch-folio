@@ -107,3 +107,21 @@ test('completed ticks remove stale queued entries while preserving valid future 
     assert.ok(diagnostics.futureInputCount > 0)
     assert.ok(diagnostics.futureLeadMaxTicks <= 18)
 })
+
+test('queue diagnostics can reuse caller-owned storage', () =>
+{
+    const { room } = createActiveRoom()
+    const target = {
+        futureInputCount: 999,
+        futureLeadMaxTicks: 999,
+        staleInputCount: 999,
+        lateInputCount: 999,
+    }
+
+    const diagnostics = room.inputQueueDiagnostics(target)
+    assert.equal(diagnostics, target)
+    assert.equal(diagnostics.futureInputCount, 0)
+    assert.equal(diagnostics.futureLeadMaxTicks, 0)
+    assert.equal(diagnostics.staleInputCount, 0)
+    assert.equal(diagnostics.lateInputCount, 0)
+})
