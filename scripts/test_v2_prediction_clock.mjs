@@ -198,8 +198,8 @@ test('client diagnostics expose prediction and network health counters', () =>
     coordinator.visuals = {
         correctionCount: 5,
         remoteBuffers: new Map([
-            [ 2, {} ],
-            [ 3, {} ],
+            [ 2, { size: 6 } ],
+            [ 3, { size: 4 } ],
         ]),
     }
 
@@ -211,5 +211,5 @@ test('client diagnostics expose prediction and network health counters', () =>
     assert.equal(coordinator.diagnostics.rttMs, 88)
     assert.equal(coordinator.diagnostics.jitterMs, 12)
     assert.equal(coordinator.diagnostics.clockDiscontinuities, 1)
-    assert.equal(coordinator.diagnostics.remoteInterpolationBufferDepth, 2)
+    assert.equal(coordinator.diagnostics.remoteInterpolationBufferDepth, 6)
 })
