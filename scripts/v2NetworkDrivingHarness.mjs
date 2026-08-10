@@ -6,6 +6,7 @@ import {
 } from '@ch-folio/authoritative-physics'
 import { loadRapierForNode } from '../packages/authoritative-physics/test/loadRapierForNode.mjs'
 import { scenarioFixtures } from '../packages/authoritative-physics/test/scenarioCatalog.js'
+import { validateScenarioFixture } from '../packages/authoritative-physics/test/scenarioHarness.mjs'
 import { PredictionWorld } from '../sources/Game/MultiplayerV2/PredictionWorld.js'
 import { Reconciler, localError } from '../sources/Game/MultiplayerV2/Reconciler.js'
 import {
@@ -377,7 +378,7 @@ function collisionFixture(name)
     const found = scenarioFixtures.find(({ fixture }) => fixture.id === id)
     if(!found)
         throw new TypeError(`unsupported collision fixture ${String(name)}`)
-    return found.fixture
+    return validateScenarioFixture(found.fixture)
 }
 
 export async function runTwoClientCollisionScenario({
