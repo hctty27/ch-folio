@@ -59,6 +59,15 @@ test('late acknowledgement increases lead immediately but keeps it bounded', () 
     assert.ok(sync.commandLeadTicks <= 18)
 })
 
+test('clock discontinuities are counted without re-anchoring prediction time', () =>
+{
+    const sync = new TickSynchronizer({ clockDiscontinuityTicks: 30 })
+    sync.observeState(100, 0)
+    assert.equal(sync.observeState(200, 1000 / 60), false)
+    assert.equal(sync.clockDiscontinuities, 1)
+    assert.equal(sync.estimateServerTick(1000 / 60), 101)
+})
+
 test('clock discontinuities are counted across uint32 wrap safely', () =>
 {
     const sync = new TickSynchronizer({ clockDiscontinuityTicks: 30 })
