@@ -170,7 +170,10 @@ export class TickSynchronizer
 
             const expectedTick = this.estimateServerTick(receivedAt)
             if(Math.abs(tickDelta(tick, expectedTick)) > this.clockDiscontinuityTicks)
+            {
                 this._clockDiscontinuities++
+                return false
+            }
         }
 
         this._anchorServerTick = tick
