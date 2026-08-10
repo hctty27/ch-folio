@@ -106,3 +106,22 @@ test('600-tick summary preserves queue diagnostic gate semantics', () =>
     assert.equal(summary.gauges.lateInputRate, 0.01)
     assert.equal(summary.gauges.persistentFutureQueueGrowth, false)
 })
+
+test('summary reset reuses fixed diagnostics storage', () =>
+{
+    const metrics = new Metrics()
+    const windowStorage = metrics.windowInputQueueSamples
+
+    for(let tick = 1; tick <= 600; tick++)
+    {
+        metrics.recordInputQueueDiagnostics({
+            futureInputCount: tick % 3,
+            futureLeadMaxTicks: 8,
+            staleInputCount: 0,
+            lateInputCount: 0,
+        })
+        metrics.completeTick(tick)
+    }
+
+    assert.equal(metrics.windowInputQueueSamples, windowStorage)
+})
