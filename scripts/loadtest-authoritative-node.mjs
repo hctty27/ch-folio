@@ -3,14 +3,18 @@ import { fileURLToPath } from 'node:url'
 import {
     buildNodeBenchmarkWebSocketUrl,
     parseNodeLoadTestOptions,
-    runNodeLoadTest as runBaseNodeLoadTest,
 } from './loadtest-authoritative-node-base.mjs'
+import { runServerTickAlignedNodeLoadTest } from './loadtest-authoritative-node-aligned.mjs'
 
 export {
     FrameRouter,
     buildNodeBenchmarkWebSocketUrl,
     parseNodeLoadTestOptions,
 } from './loadtest-authoritative-node-base.mjs'
+export {
+    commandTickForBenchmarkPrediction,
+    nextBenchmarkPredictionTick,
+} from './loadtest-authoritative-node-aligned.mjs'
 
 function failure(failures, gate, actual, limit, comparison = '<=')
 {
@@ -31,6 +35,7 @@ export function evaluateNodeLoadTestGates(report)
     const max = finiteOrInfinity(totalTick.maxMs)
     const futureLead = finiteOrInfinity(report?.server?.gauges?.futureLeadMaxTicks)
     const stale = finiteOrInfinity(report?.server?.gauges?.staleInputMax)
+    const lateInputRate = finiteOrInfinity(report?.server?.gauges?.lateInputRate)
     const persistentGrowth = report?.server?.gauges?.persistentFutureQueueGrowth === true
     const overload = finiteOrInfinity(report?.server?.scheduler?.overloadCallbacks)
     const disconnects = finiteOrInfinity(report?.disconnects)
@@ -43,6 +48,8 @@ export function evaluateNodeLoadTestGates(report)
     if(max > 16.67) failure(failures, 'server.totalTick.maxMs', max, 16.67)
     if(stale > 0) failure(failures, 'server.gauges.staleInputMax', stale, 0)
     if(futureLead > 18) failure(failures, 'server.gauges.futureLeadMaxTicks', futureLead, 18)
+    if(lateInputRate > 0.01)
+        failure(failures, 'server.gauges.lateInputRate', lateInputRate, 0.01)
     if(persistentGrowth)
     {
         failure(
@@ -64,7 +71,7 @@ export function evaluateNodeLoadTestGates(report)
 
 export async function runNodeLoadTest(options)
 {
-    const report = await runBaseNodeLoadTest(options)
+    const report = await runServerTickAlignedNodeLoadTest(options)
     report.gates = evaluateNodeLoadTestGates(report)
     return report
 }
