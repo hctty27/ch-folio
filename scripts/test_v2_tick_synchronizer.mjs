@@ -66,3 +66,23 @@ test('clock discontinuities are counted across uint32 wrap safely', () =>
     sync.observeState(0x00000010, 1000 / 60)
     assert.equal(sync.clockDiscontinuities, 1)
 })
+
+test('full-sync reset reseeds the clock and clears in-flight timing samples', () =>
+{
+    const sync = new TickSynchronizer()
+    sync.observeState(100, 0)
+    sync.recordSent(7, 108, 10)
+    sync.acknowledge(7, 110, 110)
+    assert.ok(sync.rttMs > 0)
+
+    sync.recordSent(8, 120, 120)
+    sync.reset(200, 1000)
+
+    assert.equal(sync.estimateServerTick(1000), 200)
+    assert.equal(sync.desiredPredictionTick(1000), 208)
+    assert.equal(sync.rttMs, 0)
+    assert.equal(sync.jitterMs, 0)
+    assert.equal(sync.lateAcks, 0)
+    assert.equal(sync.clockDiscontinuities, 0)
+    assert.equal(sync.acknowledge(8, 120, 130), false)
+})
