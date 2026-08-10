@@ -2,6 +2,9 @@ name: Node Authoritative Named Staging Acceptance
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -12,6 +15,7 @@ concurrency:
 
 env:
   STAGING_HOSTNAME: hk-test.testnb.me
+  IMPLEMENTATION_HEAD: c067f2b0ad33caeeb8ef7a520a32f5c2cc7be456
 
 jobs:
   acceptance:
@@ -19,6 +23,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Pin exact implementation head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${IMPLEMENTATION_HEAD}"
+          git checkout --detach "${IMPLEMENTATION_HEAD}"
+          test "$(git rev-parse HEAD)" = "${IMPLEMENTATION_HEAD}"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -40,6 +51,7 @@ jobs:
             exit 1
           fi
           echo "staging_hostname=${STAGING_HOSTNAME}"
+          echo "implementation_head=$(git rev-parse HEAD)"
       - name: Install clean Node dependencies
         run: |
           npm ci
