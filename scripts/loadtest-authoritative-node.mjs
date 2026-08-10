@@ -7,9 +7,10 @@ import {
 } from './loadtest-authoritative-node-base.mjs'
 
 export {
+    FrameRouter,
     buildNodeBenchmarkWebSocketUrl,
     parseNodeLoadTestOptions,
-}
+} from './loadtest-authoritative-node-base.mjs'
 
 function failure(failures, gate, actual, limit, comparison = '<=')
 {
