@@ -216,7 +216,7 @@ test('sync-ready players wait indefinitely and scan spawns 0 through 7 every thr
     assert.equal(spawn.spawnIndex, 5)
 })
 
-test('RoomSimulation consumes target inputs exactly three server ticks later and counts late input', () =>
+test('RoomSimulation consumes target inputs three ticks later and coalesces late input forward', () =>
 {
     const { simulation, world } = createSimulation({
         findSpawn: ({ spawns }) => spawns[0],
@@ -236,8 +236,14 @@ test('RoomSimulation consumes target inputs exactly three server ticks later and
 
     const applied = world.inputApplications.find((entry) => entry.input.sequence === 44)
     assert.equal(applied.serverTick, 7)
-    assert.equal(simulation.queueInput(1, input(4, 45)), false)
+
+    assert.equal(simulation.queueInput(1, input(4, 45)), true)
     assert.equal(simulation.lateInputCount, 1)
+    simulation.advanceOneTick()
+
+    const coalesced = world.inputApplications.find((entry) => entry.input.sequence === 45)
+    assert.equal(coalesced.serverTick, 8)
+    assert.equal(coalesced.input.clientTick, 5)
 })
 
 test('disconnect keeps the physical vehicle for 180 ticks, resume cancels expiry, and expiry despawns deterministically', () =>
