@@ -140,6 +140,24 @@ test('FrameRouter retains one-shot frames that arrive before waitFor', async () 
     assert.equal(received, expected)
 })
 
+test('Node load command timeline predicts ahead and serializes predictionTick minus three', async () =>
+{
+    const module = await import('./loadtest-authoritative-node.mjs')
+    assert.equal(typeof module.nextBenchmarkPredictionTick, 'function')
+    assert.equal(typeof module.commandTickForBenchmarkPrediction, 'function')
+
+    const firstPrediction = module.nextBenchmarkPredictionTick(100, null)
+    const secondPrediction = module.nextBenchmarkPredictionTick(100, firstPrediction)
+    const caughtUpPrediction = module.nextBenchmarkPredictionTick(105, secondPrediction)
+
+    assert.equal(firstPrediction, 108)
+    assert.equal(secondPrediction, 109)
+    assert.equal(caughtUpPrediction, 113)
+    assert.equal(module.commandTickForBenchmarkPrediction(firstPrediction), 105)
+    assert.equal(module.commandTickForBenchmarkPrediction(secondPrediction), 106)
+    assert.equal(module.commandTickForBenchmarkPrediction(caughtUpPrediction), 110)
+})
+
 test('Node hosted gates pass at exact limits and allow bounded future queue depth', () =>
 {
     const report = {
@@ -150,6 +168,7 @@ test('Node hosted gates pass at exact limits and allow bounded future queue dept
                 futureInputCountMax: 100,
                 futureLeadMaxTicks: 18,
                 staleInputMax: 0,
+                lateInputRate: 0.01,
                 persistentFutureQueueGrowth: false,
             },
             scheduler: { overloadCallbacks: 0 },
@@ -166,7 +185,7 @@ test('Node hosted gates pass at exact limits and allow bounded future queue dept
     assert.deepEqual(result.failures, [])
 })
 
-test('Node hosted gates reject timing, stale queue, lead, growth, overload, disconnect, backlog, divergence, and restart breaches', () =>
+test('Node hosted gates reject timing, late/stale queue, lead, growth, overload, disconnect, backlog, divergence, and restart breaches', () =>
 {
     const report = {
         server: {
@@ -176,6 +195,7 @@ test('Node hosted gates reject timing, stale queue, lead, growth, overload, disc
                 futureInputCountMax: 100,
                 futureLeadMaxTicks: 19,
                 staleInputMax: 1,
+                lateInputRate: 0.0101,
                 persistentFutureQueueGrowth: true,
             },
             scheduler: { overloadCallbacks: 1 },
@@ -195,6 +215,7 @@ test('Node hosted gates reject timing, stale queue, lead, growth, overload, disc
         'server.totalTick.maxMs',
         'server.gauges.staleInputMax',
         'server.gauges.futureLeadMaxTicks',
+        'server.gauges.lateInputRate',
         'server.gauges.persistentFutureQueueGrowth',
         'server.scheduler.overloadCallbacks',
         'disconnects',
