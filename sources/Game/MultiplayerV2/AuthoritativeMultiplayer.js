@@ -165,6 +165,29 @@ export class AuthoritativeMultiplayer
         this.game?.ticker?.events?.on('tick', this.tickCallback, 10)
     }
 
+    get diagnostics()
+    {
+        let remoteInterpolationBufferDepth = 0
+        for(const buffer of this.visuals?.remoteBuffers?.values?.() ?? [])
+        {
+            const size = Number(buffer?.size ?? 0)
+            if(Number.isFinite(size))
+                remoteInterpolationBufferDepth = Math.max(remoteInterpolationBufferDepth, size)
+        }
+
+        return {
+            commandLeadTicks: Number(this.tickSynchronizer?.commandLeadTicks ?? 0),
+            lateInputCount: Number(this.tickSynchronizer?.lateAcks ?? 0),
+            rollbackCount: Number(this.reconciler?.rollbackCount ?? 0),
+            hardSyncCount: Number(this.reconciler?.hardSyncCount ?? 0),
+            correctionCount: Number(this.visuals?.correctionCount ?? 0),
+            rttMs: Number(this.tickSynchronizer?.rttMs ?? 0),
+            jitterMs: Number(this.tickSynchronizer?.jitterMs ?? 0),
+            clockDiscontinuities: Number(this.tickSynchronizer?.clockDiscontinuities ?? 0),
+            remoteInterpolationBufferDepth,
+        }
+    }
+
     setState(state, detail = null)
     {
         if(this.state === state && detail === null)
