@@ -91,11 +91,12 @@ export class TickSynchronizer
             'interpolationDecreaseAcks',
         )
 
-        this._commandLeadTicks = clamp(
+        this.initialLeadTicks = clamp(
             requirePositiveInteger(initialLeadTicks, 'initialLeadTicks'),
             this.minLeadTicks,
             this.maxLeadTicks,
         )
+        this._commandLeadTicks = this.initialLeadTicks
         this._interpolationDelayTicks = this.initialInterpolationDelayTicks
         this._rttMs = 0
         this._jitterMs = 0
@@ -134,6 +135,27 @@ export class TickSynchronizer
     get clockDiscontinuities()
     {
         return this._clockDiscontinuities
+    }
+
+    reset(serverTick, receivedAtMs)
+    {
+        const tick = Number(serverTick) >>> 0
+        const receivedAt = requireFinite(receivedAtMs, 'receivedAtMs')
+        this._commandLeadTicks = this.initialLeadTicks
+        this._interpolationDelayTicks = this.initialInterpolationDelayTicks
+        this._rttMs = 0
+        this._jitterMs = 0
+        this._hasRtt = false
+        this._lastRttSampleMs = null
+        this._lateAcks = 0
+        this._clockDiscontinuities = 0
+        this._stableLeadAcks = 0
+        this._stableInterpolationAcks = 0
+        this._anchorServerTick = tick
+        this._anchorReceivedAtMs = receivedAt
+        this._lastObservedServerTick = tick
+        this._sent.clear()
+        return tick
     }
 
     observeState(serverTick, receivedAtMs)
