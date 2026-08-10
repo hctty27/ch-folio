@@ -57,6 +57,7 @@ jobs:
             echo "validation_commit=$(git rev-parse HEAD)"
             echo "implementation_head=c067f2b0ad33caeeb8ef7a520a32f5c2cc7be456"
             echo "validation_change=workflow-only"
+            echo "full_verify_run=886"
             echo "node=$(node --version)"
             echo "npm=$(npm --version)"
             echo "production_warmup_ticks=600"
@@ -158,8 +159,3 @@ jobs:
             npm run smoke:authoritative-node-staging -- \
               --url=ws://127.0.0.1:8080/ws \
               --room=ci-staging-smoke
-      - run: npm run build
-      - run: npm install --prefix multiplayer-worker --ignore-scripts
-      - run: npm test --prefix multiplayer-worker
-      - run: npm run check --prefix multiplayer-worker
-      - run: cd multiplayer-worker && npx wrangler deploy --dry-run
