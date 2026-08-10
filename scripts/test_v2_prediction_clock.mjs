@@ -180,3 +180,36 @@ test('STATE observes clock and stores remote snapshots before local reconciliati
         'reconcile-local-120',
     ])
 })
+
+test('client diagnostics expose prediction and network health counters', () =>
+{
+    const coordinator = createCoordinator()
+    coordinator.tickSynchronizer = {
+        commandLeadTicks: 11,
+        lateAcks: 2,
+        rttMs: 88,
+        jitterMs: 12,
+        clockDiscontinuities: 1,
+    }
+    coordinator.reconciler = {
+        rollbackCount: 3,
+        hardSyncCount: 4,
+    }
+    coordinator.visuals = {
+        correctionCount: 5,
+        remoteBuffers: new Map([
+            [ 2, {} ],
+            [ 3, {} ],
+        ]),
+    }
+
+    assert.equal(coordinator.diagnostics.commandLeadTicks, 11)
+    assert.equal(coordinator.diagnostics.lateInputCount, 2)
+    assert.equal(coordinator.diagnostics.rollbackCount, 3)
+    assert.equal(coordinator.diagnostics.hardSyncCount, 4)
+    assert.equal(coordinator.diagnostics.correctionCount, 5)
+    assert.equal(coordinator.diagnostics.rttMs, 88)
+    assert.equal(coordinator.diagnostics.jitterMs, 12)
+    assert.equal(coordinator.diagnostics.clockDiscontinuities, 1)
+    assert.equal(coordinator.diagnostics.remoteInterpolationBufferDepth, 2)
+})
