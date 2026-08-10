@@ -110,9 +110,7 @@ class FakePredictionWorld
         if(entityOrder === null)
             return this.states.map((state) => ({ ...state }))
         const state = this.states.find((candidate) => candidate.entityOrder === entityOrder)
-        if(!state)
-            throw new Error(`unknown entityOrder ${entityOrder}`)
-        return { ...state }
+        return state ? { ...state } : null
     }
 
     destroy()
@@ -128,6 +126,7 @@ class FakeVehicleVisuals
         this.options = options
         this.updateCalls = []
         this.reconcileCalls = []
+        this.stateFrames = []
         this.destroyed = false
     }
 
@@ -136,9 +135,14 @@ class FakeVehicleVisuals
         this.reconcileCalls.push({ before, after, options })
     }
 
-    update(delta)
+    acceptAuthoritativeStateFrame(frame)
     {
-        this.updateCalls.push(delta)
+        this.stateFrames.push(frame)
+    }
+
+    update(delta, interpolationTick)
+    {
+        this.updateCalls.push({ delta, interpolationTick })
         return this.options.predictionWorld.readState().length
     }
 
@@ -188,9 +192,9 @@ class FakeReconciler
         }
     }
 
-    predict({ inputs = [], events = [] } = {})
+    predict({ predictionTick, inputs = [], events = [] } = {})
     {
-        this.predictCalls.push({ inputs, events })
+        this.predictCalls.push({ predictionTick, inputs, events })
         this.predictionWorld.tick++
         return this.predictionWorld.tick
     }
@@ -225,7 +229,11 @@ class FakeInputPublisher
             flags: 0,
         }
         this.samples.push({ tick, active, input })
-        this.options.recordPredictionInput(input)
+        this.options.recordPredictionInput?.({
+            predictionTick: tick >>> 0,
+            entityOrder: this.options.entityOrder,
+            input,
+        })
         return input
     }
 
@@ -285,6 +293,7 @@ function createCoordinator({ storage = new FakeStorage(), room = 'Room A' } = {}
         ReconcilerClass: FakeReconciler,
         InputPublisherClass: FakeInputPublisher,
         SyncOverlayClass: FakeOverlay,
+        now: () => 1000,
     })
     assert.equal(coordinator.start({ room }), true)
     return { coordinator, game, server, storage }
@@ -389,22 +398,27 @@ test('full sync fast-forwards without rendering, waits for exact spawn, then ena
     await settle(coordinator)
 
     assert.equal(coordinator.state, 'waiting_spawn')
-    assert.equal(coordinator.predictionWorld.tick, 8)
+    assert.equal(coordinator.predictionWorld.tick, 16)
+    assert.equal(coordinator.inputPublisher.samples.length, 8)
+    assert.equal(coordinator.inputPublisher.samples.every(({ active }) => active === false), true)
     assert.equal(coordinator.visuals.updateCalls.length, 0)
-    assert.equal(server.sent.length, 1)
-    assert.deepEqual(decodeSyncReady(server.sent[0]), { protocolVersion: 2 })
+    assert.equal(server.sent.length, 3)
+    assert.deepEqual(decodeSyncReady(server.sent.at(-1)), { protocolVersion: 2 })
 
     game.ticker.events.trigger('tick')
-    assert.equal(coordinator.inputPublisher.samples.at(-1).active, false)
-    assert.equal(coordinator.reconciler.predictCalls.length, 1)
+    assert.equal(coordinator.predictionWorld.tick, 16)
+    assert.equal(coordinator.reconciler.predictCalls.length, 8)
 
     server.emitFrame(activeStateFrame(9))
     await settle(coordinator)
     assert.equal(coordinator.state, 'active')
+    assert.equal(coordinator.visuals.stateFrames.length, 1)
 
     game.ticker.events.trigger('tick')
     assert.equal(coordinator.inputPublisher.samples.at(-1).active, true)
+    assert.equal(coordinator.reconciler.predictCalls.length, 11)
     assert.equal(coordinator.visuals.updateCalls.length, 1)
+    assert.equal(coordinator.visuals.updateCalls[0].interpolationTick, 3)
     assert.deepEqual(
         coordinator.overlay.states.map(({ state }) => state),
         [ 'stopped', 'connecting', 'syncing', 'waiting_spawn', 'active' ],
