@@ -1,13 +1,35 @@
 name: Verify
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: hk-server-exclusive
+  cancel-in-progress: true
+
 jobs:
-  noop:
+  test-and-build:
     runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
     steps:
-      - run: echo "validation complete; manual only"
+      - uses: actions/checkout@v4
+      - name: Checkout server-tick prediction implementation branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
+          git checkout --detach origin/design/server-tick-aligned-prediction
+          git rev-parse HEAD
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run hosted load command timeline regression
+        run: node --test scripts/test_authoritative_node_loadtest.mjs
