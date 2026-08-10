@@ -1,13 +1,9 @@
 name: Verify
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
-      - feat/authoritative-physics-foundation
   workflow_dispatch:
 
 permissions:
@@ -23,39 +19,20 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect current staging process ownership
+      - name: Checkout server-tick prediction implementation branch
         shell: bash
         run: |
           set -euo pipefail
-          {
-            echo "runner_user=$(id -un)"
-            echo "runner_uid=$(id -u)"
-            echo "=== port 8080 ==="
-            ss -H -ltnp '( sport = :8080 )' || true
-            echo "=== systemd ==="
-            systemctl is-active ch-folio-authoritative-node.service 2>&1 || true
-            systemctl show ch-folio-authoritative-node.service -p MainPID -p User -p Group -p ExecStart -p Restart 2>&1 || true
-
-            pid="$(ss -H -ltnp '( sport = :8080 )' 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n1)"
-            echo "port_pid=${pid:-none}"
-            if [[ -n "${pid}" ]]; then
-              echo "=== process ==="
-              ps -o user=,uid=,pid=,ppid=,stat=,comm=,args= -p "${pid}" || true
-              echo "cwd=$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || true)"
-              echo "exe=$(readlink -f "/proc/${pid}/exe" 2>/dev/null || true)"
-              if kill -0 "${pid}" 2>/dev/null; then
-                echo "runner_can_signal_port_pid=yes"
-              else
-                echo "runner_can_signal_port_pid=no"
-              fi
-            fi
-            echo "=== health ==="
-            curl --fail --silent --show-error http://127.0.0.1:8080/healthz || true
-          } | tee staging-port-inspection.txt
-      - name: Upload staging port inspection
-        uses: actions/upload-artifact@v4
+          git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
+          git checkout --detach origin/design/server-tick-aligned-prediction
+          git rev-parse HEAD
+      - uses: actions/setup-node@v4
         with:
-          name: task9-staging-port-inspection
-          path: staging-port-inspection.txt
-          if-no-files-found: error
-          retention-days: 30
+          node-version: 24
+          cache: npm
+      - name: Install focused test dependencies
+        run: |
+          npm ci
+          npm ci --prefix authoritative-node --ignore-scripts
+      - name: Run focused future-queue metrics regression
+        run: node --test authoritative-node/test/futureQueueMetrics.test.mjs
