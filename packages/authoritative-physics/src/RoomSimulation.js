@@ -5,9 +5,18 @@ function tickDelta(left, right)
     return ((Number(left) >>> 0) - (Number(right) >>> 0)) | 0
 }
 
+function diagnosticsTarget(target)
+{
+    if(target === undefined || target === null)
+        return {}
+    if(typeof target !== 'object')
+        throw new TypeError('input queue diagnostics target must be an object')
+    return target
+}
+
 export class RoomSimulation extends RoomSimulationBase
 {
-    inputQueueDiagnostics()
+    inputQueueDiagnostics(target = null)
     {
         let futureInputCount = 0
         let futureLeadMaxTicks = 0
@@ -35,12 +44,12 @@ export class RoomSimulation extends RoomSimulationBase
             }
         }
 
-        return {
-            futureInputCount,
-            futureLeadMaxTicks,
-            staleInputCount,
-            lateInputCount: this.lateInputCount,
-        }
+        const diagnostics = diagnosticsTarget(target)
+        diagnostics.futureInputCount = futureInputCount
+        diagnostics.futureLeadMaxTicks = futureLeadMaxTicks
+        diagnostics.staleInputCount = staleInputCount
+        diagnostics.lateInputCount = this.lateInputCount
+        return diagnostics
     }
 }
 
