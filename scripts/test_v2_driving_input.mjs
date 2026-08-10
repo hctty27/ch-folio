@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { quantizeInput } from '@ch-folio/authoritative-physics'
+import {
+    AuthoritativeWorld,
+    ROOM_SLOT_STATES,
+    RoomSimulation,
+    quantizeInput,
+} from '@ch-folio/authoritative-physics'
 import { loadRapierForNode } from '../packages/authoritative-physics/test/loadRapierForNode.mjs'
 import { PredictionWorld } from '../sources/Game/MultiplayerV2/PredictionWorld.js'
 
@@ -26,6 +31,11 @@ function input(tick, throttle)
     })
 }
 
+function horizontalDistance(before, after)
+{
+    return Math.hypot(after[0] - before[0], after[2] - before[2])
+}
+
 test('v2 prediction moves the local vehicle under sustained forward input', () =>
 {
     const prediction = new PredictionWorld({ RAPIER, mapData })
@@ -46,8 +56,48 @@ test('v2 prediction moves the local vehicle under sustained forward input', () =
         })
     }
     const after = prediction.readState(1).position
-    const horizontalDistance = Math.hypot(after[0] - before[0], after[2] - before[2])
 
-    assert.ok(horizontalDistance > 0.5, `expected forward input to move the car, moved ${horizontalDistance}m`)
+    assert.ok(
+        horizontalDistance(before, after) > 0.5,
+        `expected forward input to move the car`,
+    )
     prediction.destroy()
+})
+
+test('authoritative room keeps driving usable with four ticks of input latency', () =>
+{
+    const world = new AuthoritativeWorld({ RAPIER, mapData })
+    const room = new RoomSimulation({ world, mapData })
+    const reserved = room.reserveSlot({ playerId: 1 })
+    room.markSyncReady(reserved.entityOrder)
+    while(room.getSlot(reserved.entityOrder).slotState !== ROOM_SLOT_STATES.ACTIVE)
+        room.advanceOneTick()
+
+    const before = world.readVehicleState(reserved.entityOrder).position
+    const deliveries = new Map()
+    const pending = []
+    const latencyTicks = 4
+
+    for(let frame = 1; frame <= 180; frame++)
+    {
+        const clientTick = (room.currentTick + 1) >>> 0
+        pending.push(input(clientTick, 1))
+
+        if(pending.length === 3)
+        {
+            const deliveryFrame = frame + latencyTicks
+            deliveries.set(deliveryFrame, pending.splice(0))
+        }
+
+        for(const queued of deliveries.get(frame) ?? [])
+            room.queueInput(reserved.entityOrder, queued)
+
+        room.advanceOneTick()
+    }
+
+    const after = world.readVehicleState(reserved.entityOrder).position
+    const distance = horizontalDistance(before, after)
+
+    assert.ok(distance > 0.5, `expected delayed forward input to move the car, moved ${distance}m`)
+    world.destroy()
 })
