@@ -259,7 +259,7 @@ test('v2 server guards reconnects, caps exponential backoff, and clears timers o
     assert.equal(server.stopped, true)
 })
 
-test('input publisher reads and quantizes once, records the same object, and flushes every three ticks', () =>
+test('input publisher records physical prediction metadata and flushes every three ticks', () =>
 {
     let playerReads = 0
     const player = {
@@ -282,8 +282,9 @@ test('input publisher reads and quantizes once, records the same object, and flu
     const recorded = []
     const sent = []
     const publisher = new InputPublisher(game, {
+        entityOrder: 2,
         isActive: () => true,
-        recordPredictionInput: (input) => recorded.push(input),
+        recordPredictionInput: (record) => recorded.push(record),
         sendFrame: (frame) =>
         {
             sent.push(frame)
@@ -298,14 +299,17 @@ test('input publisher reads and quantizes once, records the same object, and flu
     assert.equal(playerReads, 3)
     assert.equal(recorded.length, 3)
     assert.equal(publisher.unacknowledgedInputs.length, 3)
-    assert.strictEqual(recorded[0], publisher.unacknowledgedInputs[0])
-    assert.strictEqual(recorded[1], publisher.unacknowledgedInputs[1])
-    assert.strictEqual(recorded[2], publisher.unacknowledgedInputs[2])
+    assert.deepEqual(recorded.map((record) => record.predictionTick), [ 10, 11, 12 ])
+    assert.deepEqual(recorded.map((record) => record.entityOrder), [ 2, 2, 2 ])
+    assert.strictEqual(recorded[0].input, publisher.unacknowledgedInputs[0])
+    assert.strictEqual(recorded[1].input, publisher.unacknowledgedInputs[1])
+    assert.strictEqual(recorded[2].input, publisher.unacknowledgedInputs[2])
     assert.equal(sent.length, 1)
-    assert.deepEqual(decodeInputBatch(sent[0]), recorded)
+    assert.deepEqual(decodeInputBatch(sent[0]), recorded.map((record) => record.input))
+    assert.deepEqual(recorded.map((record) => record.input.clientTick), [ 7, 8, 9 ])
 })
 
-test('input publisher emits safe neutral input before active spawn', () =>
+test('input publisher emits safe neutral command-timeline input before active spawn', () =>
 {
     let reads = 0
     const game = {}
@@ -326,8 +330,9 @@ test('input publisher emits safe neutral input before active spawn', () =>
 
     const recorded = []
     const publisher = new InputPublisher(game, {
+        entityOrder: 1,
         isActive: () => false,
-        recordPredictionInput: (input) => recorded.push(input),
+        recordPredictionInput: (record) => recorded.push(record),
         sendFrame: () => true,
     })
 
@@ -335,13 +340,17 @@ test('input publisher emits safe neutral input before active spawn', () =>
 
     assert.equal(reads, 1)
     assert.deepEqual(recorded[0], {
-        clientTick: 3,
-        sequence: 0,
-        throttle: 128,
-        brake: 255,
-        steering: 0,
-        suspensions: 0,
-        flags: 0,
+        predictionTick: 3,
+        entityOrder: 1,
+        input: {
+            clientTick: 0,
+            sequence: 0,
+            throttle: 128,
+            brake: 255,
+            steering: 0,
+            suspensions: 0,
+            flags: 0,
+        },
     })
 })
 
