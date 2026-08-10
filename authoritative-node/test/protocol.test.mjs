@@ -2,12 +2,16 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { WebSocket } from 'ws'
 import {
+    BENCHMARK_FRAME_TYPES,
     FRAME_TYPES,
     ROOM_SLOT_STATES,
+    decodeBenchmarkSummary,
     decodeErrorFrame,
     decodeFullSyncFrame,
     decodeResume,
     decodeStateFrame,
+    digestBenchmarkToken,
+    encodeBenchmarkSummaryRequest,
     encodeFullSyncRequest,
     encodeHello,
     encodeInputBatch,
@@ -18,6 +22,7 @@ import {
 import { createAuthoritativeServer } from '../src/server.js'
 
 const TEST_TIMEOUT_MS = 2000
+const BENCHMARK_TOKEN = 'benchmark-token-0123456789-abcdef'
 
 function withTimeout(promise, label, timeoutMs = TEST_TIMEOUT_MS)
 {
@@ -123,11 +128,12 @@ async function hello(client, clientTick = 0)
     return { grant, fullSync }
 }
 
-async function createTestServer(t)
+async function createTestServer(t, { benchmarkToken = null } = {})
 {
     const service = createAuthoritativeServer({
         host: '127.0.0.1',
         port: 0,
+        benchmarkToken,
         roomOptions: { autoSchedule: false },
         heartbeatIntervalMs: 0,
     })
@@ -188,6 +194,51 @@ test('HELLO, sync-ready, input, state, and full-sync request form one binary lif
     decodeFullSyncFrame(await syncPromise)
 })
 
+test('authenticated active session receives bounded Node benchmark summary without token disclosure', async (t) =>
+{
+    const service = await createTestServer(t, { benchmarkToken: BENCHMARK_TOKEN })
+    const { port } = service.address()
+    const client = await openClient(port, 'benchmark')
+    t.after(() => client.socket.terminate())
+    await hello(client)
+
+    const summaryPromise = client.collector.nextType(BENCHMARK_FRAME_TYPES.SUMMARY)
+    client.socket.send(encodeBenchmarkSummaryRequest({
+        tokenDigest: await digestBenchmarkToken(BENCHMARK_TOKEN),
+    }))
+    const summary = decodeBenchmarkSummary(await summaryPromise)
+    assert.equal(summary.schemaVersion, 1)
+    assert.equal(summary.mode, 'node')
+    assert.equal(summary.room, 'benchmark')
+    assert.equal(summary.currentTick, 0)
+    assert.equal(summary.runtimeStarts, 1)
+    assert.equal(summary.roomRestarts, 0)
+    assert.equal(summary.rapierVersion, '0.17.3')
+    assert.equal(summary.versions.protocolVersion, 2)
+    assert.equal(summary.rapierInternalTimingAvailable, false)
+    assert.equal(summary.memoryScope, 'node-process-rss')
+    assert.equal(Number.isFinite(summary.observedPeakMemoryBytes), true)
+    assert.equal(summary.metrics.ticks, 0)
+    assert.equal(JSON.stringify(summary).includes(BENCHMARK_TOKEN), false)
+})
+
+test('wrong benchmark digest receives controlled unavailable error without credential disclosure', async (t) =>
+{
+    const service = await createTestServer(t, { benchmarkToken: BENCHMARK_TOKEN })
+    const { port } = service.address()
+    const client = await openClient(port, 'benchmark-denied')
+    t.after(() => client.socket.terminate())
+    await hello(client)
+
+    client.socket.send(encodeBenchmarkSummaryRequest({
+        tokenDigest: await digestBenchmarkToken('wrong-benchmark-token-0123456789-abcd'),
+    }))
+    const error = decodeErrorFrame((await client.collector.next()).data)
+    assert.equal(error.code, 8)
+    assert.equal(error.message, 'BENCHMARK_UNAVAILABLE')
+    assert.equal(JSON.stringify(error).includes(BENCHMARK_TOKEN), false)
+})
+
 test('one room accepts eight sessions and rejects a ninth without affecting another room', async (t) =>
 {
     const service = await createTestServer(t)
@@ -214,6 +265,23 @@ test('one room accepts eight sessions and rejects a ninth without affecting anot
     const result = await hello(isolated)
     assert.equal(result.fullSync.entities.length, 1)
     assert.equal(service.registry.size, 2)
+})
+
+test('current-controller disconnect records exactly one benchmark disconnect', async (t) =>
+{
+    const service = await createTestServer(t)
+    const { port } = service.address()
+    const client = await openClient(port, 'disconnect-metrics')
+    await hello(client)
+    const room = service.registry.get('disconnect-metrics')
+
+    client.socket.close(1000, 'disconnect')
+    await withTimeout(new Promise((resolve) => client.socket.once('close', resolve)), 'metrics close')
+    await room.flushMessages()
+
+    assert.equal(room.metrics.readBenchmarkSummary().disconnects, 1)
+    room.handleClose(client.socket)
+    assert.equal(room.metrics.readBenchmarkSummary().disconnects, 1)
 })
 
 test('resume rotates credentials before expiry and the room disappears at tick 180', async (t) =>

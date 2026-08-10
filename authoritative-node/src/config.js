@@ -6,6 +6,15 @@ function parsePort(value)
     return port
 }
 
+function parseBenchmarkToken(value)
+{
+    if(value === undefined || value === null || value === '')
+        return null
+    if(typeof value !== 'string' || value.length < 32)
+        throw new RangeError('AUTHORITATIVE_BENCHMARK_TOKEN must contain at least 32 characters')
+    return value
+}
+
 export function readServerConfig(env = process.env)
 {
     const host = typeof env.HOST === 'string' && env.HOST.trim() !== ''
@@ -15,5 +24,6 @@ export function readServerConfig(env = process.env)
     return {
         host,
         port: parsePort(env.PORT),
+        benchmarkToken: parseBenchmarkToken(env.AUTHORITATIVE_BENCHMARK_TOKEN),
     }
 }

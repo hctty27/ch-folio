@@ -1,16 +1,23 @@
+import { performance } from 'node:perf_hooks'
 import mapSource from '../../packages/authoritative-physics/generated/map-v1.json' with { type: 'json' }
 import RAPIER from '@dimforge/rapier3d'
 import {
     AuthoritativeWorld,
+    BENCHMARK_FRAME_TYPES,
     FRAME_TYPES,
     LIFECYCLE_FRAME_TYPES,
+    RAPIER_VERSION,
     ROOM_SLOT_STATES,
     RoomSimulation,
+    VERSIONS,
+    decodeBenchmarkSummaryRequest,
     decodeFullSyncRequest,
     decodeHello,
     decodeInputBatch,
     decodeResume,
     decodeSyncReady,
+    digestBenchmarkToken,
+    encodeBenchmarkSummary,
     encodeErrorFrame,
     encodeFullSyncFrame,
     encodeResume,
@@ -19,9 +26,14 @@ import {
     loadAuthoritativeMap,
 } from '@ch-folio/authoritative-physics'
 import { WebSocket } from 'ws'
+import { Metrics } from './Metrics.js'
 import { SessionRegistry, SESSION_STATES } from './SessionRegistry.js'
 import { TickScheduler } from './TickScheduler.js'
-import { resumeTokenFromBytes, resumeTokenToBytes } from './token.js'
+import {
+    constantTimeEqual,
+    resumeTokenFromBytes,
+    resumeTokenToBytes,
+} from './token.js'
 
 const ERROR_CODES = Object.freeze({
     HELLO_REQUIRED: 1,
@@ -31,10 +43,12 @@ const ERROR_CODES = Object.freeze({
     INVALID_RESUME: 5,
     STALE_CONNECTION: 6,
     SESSION_FAILURE: 7,
+    BENCHMARK_UNAVAILABLE: 8,
 })
 
 const STATE_BROADCAST_INTERVAL_TICKS = 3
 const WORLD_HASH_INTERVAL_TICKS = 60
+const MIN_BENCHMARK_TOKEN_LENGTH = 32
 
 function createAttachment()
 {
@@ -65,17 +79,27 @@ export class NodeAuthoritativeRoom
         onEmpty = () => {},
         clock,
         autoSchedule = true,
+        benchmarkToken = null,
     } = {})
     {
         if(typeof room !== 'string' || room.length < 1)
             throw new TypeError('room must be a non-empty string')
         if(typeof onEmpty !== 'function')
             throw new TypeError('onEmpty must be a function')
+        if(
+            benchmarkToken !== null
+            && (typeof benchmarkToken !== 'string' || benchmarkToken.length < MIN_BENCHMARK_TOKEN_LENGTH)
+        )
+            throw new RangeError(`benchmarkToken must contain at least ${MIN_BENCHMARK_TOKEN_LENGTH} characters`)
 
         this.room = room
         this.onEmpty = onEmpty
         this.autoSchedule = autoSchedule
         this.sessions = new SessionRegistry()
+        this.metrics = new Metrics()
+        this.benchmarkTokenDigest = benchmarkToken === null
+            ? null
+            : digestBenchmarkToken(benchmarkToken)
         this.sockets = new Set()
         this.attachments = new Map()
         this.authoritativeMap = null
@@ -91,6 +115,8 @@ export class NodeAuthoritativeRoom
         this.scheduler = new TickScheduler({
             clock,
             onTick: () => this.advanceOneTick(),
+            onCallback: (dueTicks, executedTicks) =>
+                this.metrics.recordSchedulerCallback(dueTicks, executedTicks),
         })
     }
 
@@ -335,6 +361,11 @@ export class NodeAuthoritativeRoom
                 this.sendFullSync(socket)
                 return
             }
+            if(frameType === BENCHMARK_FRAME_TYPES.SUMMARY_REQUEST)
+            {
+                await this.acceptBenchmarkSummary(socket, bytes)
+                return
+            }
             this.rejectSocket(socket, ERROR_CODES.UNEXPECTED_FRAME, 'UNEXPECTED_FRAME', 1008)
         }
         catch(error)
@@ -342,6 +373,40 @@ export class NodeAuthoritativeRoom
             console.warn('[authoritative-node] invalid active frame', error)
             this.rejectSocket(socket, ERROR_CODES.INVALID_HANDSHAKE, 'INVALID_FRAME', 1002)
         }
+    }
+
+    async acceptBenchmarkSummary(socket, bytes)
+    {
+        const request = decodeBenchmarkSummaryRequest(bytes)
+        const expected = this.benchmarkTokenDigest === null
+            ? null
+            : await this.benchmarkTokenDigest
+        if(expected === null || !constantTimeEqual(expected, request.tokenDigest))
+        {
+            this.rejectSocket(
+                socket,
+                ERROR_CODES.BENCHMARK_UNAVAILABLE,
+                'BENCHMARK_UNAVAILABLE',
+                1008,
+            )
+            return
+        }
+
+        const summary = {
+            schemaVersion: 1,
+            mode: 'node',
+            room: this.room,
+            currentTick: this.currentTick,
+            runtimeStarts: 1,
+            roomRestarts: 0,
+            rapierVersion: RAPIER_VERSION,
+            versions: VERSIONS,
+            rapierInternalTimingAvailable: false,
+            observedPeakMemoryBytes: process.memoryUsage.rss(),
+            memoryScope: 'node-process-rss',
+            metrics: this.metrics.readBenchmarkSummary(),
+        }
+        this.safeSend(socket, encodeBenchmarkSummary(summary))
     }
 
     acceptSyncReady(attachment)
@@ -379,12 +444,24 @@ export class NodeAuthoritativeRoom
         }
     }
 
+    readQueueDepth()
+    {
+        if(this.simulation === null)
+            return 0
+        return this.simulation.slots.reduce((maximum, slot) =>
+            Math.max(maximum, slot?.queuedInputs?.size ?? 0), 0)
+    }
+
     advanceOneTick()
     {
         if(this.simulation === null || this.destroyed)
             return this.currentTick
+        if(this.benchmarkTokenDigest !== null)
+            return this.advanceOneTickWithBenchmarkPhases()
 
+        const started = performance.now()
         this.currentTick = this.simulation.advanceOneTick()
+        const completedTick = this.currentTick
         this.syncActiveSessionStates()
         this.sessions.expireGrace(this.currentTick)
 
@@ -394,6 +471,51 @@ export class NodeAuthoritativeRoom
             this.broadcastState()
 
         this.cleanupIfEmpty()
+        this.metrics.recordPhase('totalTick', performance.now() - started)
+        this.metrics.recordQueueDepth(this.readQueueDepth())
+        this.metrics.setSlots(this.sessions.size)
+        this.metrics.completeTick(completedTick)
+        return this.currentTick
+    }
+
+    advanceOneTickWithBenchmarkPhases()
+    {
+        const started = performance.now()
+
+        let phaseStarted = performance.now()
+        this.currentTick = this.simulation.advanceOneTick()
+        this.metrics.recordPhase('simulationAdvance', performance.now() - phaseStarted)
+        const completedTick = this.currentTick
+
+        phaseStarted = performance.now()
+        this.syncActiveSessionStates()
+        this.metrics.recordPhase('sessionSync', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        this.sessions.expireGrace(this.currentTick)
+        this.metrics.recordPhase('graceExpiry', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        if(this.currentTick % WORLD_HASH_INTERVAL_TICKS === 0)
+            this.captureWorldHash()
+        this.metrics.recordPhase('worldHashCapture', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        if(this.currentTick % STATE_BROADCAST_INTERVAL_TICKS === 0)
+            this.broadcastState()
+        this.metrics.recordPhase('stateBroadcast', performance.now() - phaseStarted)
+
+        phaseStarted = performance.now()
+        this.cleanupIfEmpty()
+        this.metrics.recordPhase('cleanup', performance.now() - phaseStarted)
+
+        this.metrics.recordPhase('totalTick', performance.now() - started)
+
+        phaseStarted = performance.now()
+        this.metrics.recordQueueDepth(this.readQueueDepth())
+        this.metrics.setSlots(this.sessions.size)
+        this.metrics.recordPhase('queueBookkeeping', performance.now() - phaseStarted)
+        this.metrics.completeTick(completedTick)
         return this.currentTick
     }
 
@@ -528,7 +650,10 @@ export class NodeAuthoritativeRoom
                 currentTick: this.currentTick,
             })
         )
+        {
+            this.metrics.recordDisconnect()
             this.simulation?.disconnect(attachment.entityOrder)
+        }
 
         this.cleanupIfEmpty()
     }

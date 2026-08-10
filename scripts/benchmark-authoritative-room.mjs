@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
-import { performance } from 'node:perf_hooks'
+import { PerformanceObserver, performance } from 'node:perf_hooks'
 
 import mapSource from '../packages/authoritative-physics/generated/map-v1.json' with { type: 'json' }
 import pileupFixture from '../packages/authoritative-physics/test/fixtures/eight-car-pileup.json' with { type: 'json' }
@@ -22,6 +22,7 @@ import {
 } from '@ch-folio/authoritative-physics'
 
 const DEFAULT_TICKS = 36_000
+const DEFAULT_SLOW_TICK_THRESHOLD_MS = 5
 const SAMPLE_INTERVAL_TICKS = 3
 const HASH_INTERVAL_TICKS = 60
 const SAFE_INPUT = Object.freeze({
@@ -182,11 +183,38 @@ function record(samples, phase, durationMs)
     samples.set(phase, values)
 }
 
+function recordDiagnosticPhase(target, phase, durationMs)
+{
+    if(target === null)
+        return
+    target[phase] = (target[phase] ?? 0) + Math.max(0, durationMs)
+}
+
 function readRssBytes()
 {
     if(typeof process.memoryUsage.rss === 'function')
         return process.memoryUsage.rss()
     return process.memoryUsage().rss
+}
+
+function readDiagnosticMemory()
+{
+    const memory = process.memoryUsage()
+    return {
+        heapUsedBytes: Math.max(0, Math.trunc(memory.heapUsed)),
+        externalBytes: Math.max(0, Math.trunc(memory.external)),
+        arrayBuffersBytes: Math.max(0, Math.trunc(memory.arrayBuffers ?? 0)),
+    }
+}
+
+function normalizeGcEntry(entry)
+{
+    return {
+        startTimeMs: entry.startTime,
+        durationMs: entry.duration,
+        kind: Number(entry.detail?.kind ?? 0),
+        flags: Number(entry.detail?.flags ?? 0),
+    }
 }
 
 function recordRapierInternalTimings(world, samples)
@@ -202,17 +230,45 @@ function recordRapierInternalTimings(world, samples)
     }
 }
 
-export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
+function validateSlowTickThreshold(value)
+{
+    if(!Number.isFinite(value) || value < 0)
+        throw new TypeError('slowTickThresholdMs must be a finite non-negative number')
+    return Number(value)
+}
+
+export async function runLocalBenchmark({
+    ticks = DEFAULT_TICKS,
+    diagnostics = false,
+    slowTickThresholdMs = DEFAULT_SLOW_TICK_THRESHOLD_MS,
+    rapier = null,
+} = {})
 {
     if(!Number.isSafeInteger(ticks) || ticks < 1)
         throw new TypeError('ticks must be a positive safe integer')
+    if(typeof diagnostics !== 'boolean')
+        throw new TypeError('diagnostics must be a boolean')
+    const diagnosticThreshold = validateSlowTickThreshold(slowTickThresholdMs)
 
     const normalized = validateScenarioFixture(pileupFixture)
     const inputsByFixtureTick = groupInputs(normalized)
-    const RAPIER = await loadRapierForNode()
+    const RAPIER = rapier ?? await loadRapierForNode()
     const primary = createWorld(RAPIER, normalized)
     const shadow = createWorld(RAPIER, normalized)
     const samples = new Map()
+    const slowTicks = []
+    const gcEntries = []
+    const appendGcEntries = (entries) =>
+    {
+        for(const entry of entries)
+            gcEntries.push(normalizeGcEntry(entry))
+    }
+    const gcObserver = diagnostics && PerformanceObserver.supportedEntryTypes.includes('gc')
+        ? new PerformanceObserver((list) => appendGcEntries(list.getEntries()))
+        : null
+    if(gcObserver !== null)
+        gcObserver.observe({ entryTypes: [ 'gc' ] })
+
     let checksumMismatches = 0
     let hashMismatches = 0
     let peakRssBytes = readRssBytes()
@@ -233,6 +289,9 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
         for(let tick = 1; tick <= ticks; tick++)
         {
             const tickStarted = performance.now()
+            const tickCpuStarted = diagnostics ? process.cpuUsage() : null
+            const tickResourceStarted = diagnostics ? process.resourceUsage() : null
+            const tickPhases = diagnostics ? {} : null
             const fixtureTick = ((tick - 1) % normalized.ticks) + 1
             const records = inputsByFixtureTick.get(fixtureTick) ?? []
 
@@ -246,11 +305,15 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
 
                 const encodeStarted = performance.now()
                 const encoded = encodeInputBatch([ input ])
-                record(samples, 'inputEncode', performance.now() - encodeStarted)
+                const inputEncodeMs = performance.now() - encodeStarted
+                record(samples, 'inputEncode', inputEncodeMs)
+                recordDiagnosticPhase(tickPhases, 'inputEncode', inputEncodeMs)
 
                 const decodeStarted = performance.now()
                 const [ decoded ] = decodeInputBatch(encoded)
-                record(samples, 'inputDecode', performance.now() - decodeStarted)
+                const inputDecodeMs = performance.now() - decodeStarted
+                record(samples, 'inputDecode', inputDecodeMs)
+                recordDiagnosticPhase(tickPhases, 'inputDecode', inputDecodeMs)
 
                 primary.world.setInput(recordInput.entityOrder, decoded)
                 shadow.world.setInput(recordInput.entityOrder, decoded)
@@ -264,8 +327,11 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
             const simulationMs = performance.now() - simulationStarted
             if(advanced !== tick)
                 throw new Error(`primary world advanced to unexpected tick ${advanced}`)
+            const controllerUpdateMs = Math.max(0, simulationMs - rapierStepMs)
             record(samples, 'rapierStep', rapierStepMs)
-            record(samples, 'controllerUpdate', Math.max(0, simulationMs - rapierStepMs))
+            record(samples, 'controllerUpdate', controllerUpdateMs)
+            recordDiagnosticPhase(tickPhases, 'rapierStep', rapierStepMs)
+            recordDiagnosticPhase(tickPhases, 'controllerUpdate', controllerUpdateMs)
             recordRapierInternalTimings(primary.world, samples)
 
             let primaryChecksum = null
@@ -275,7 +341,9 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
                 const checksumStarted = performance.now()
                 const states = canonicalStates(primary.world, primary.lastInputs)
                 primaryChecksum = checksum32(states) >>> 0
-                record(samples, 'checksum', performance.now() - checksumStarted)
+                const checksumMs = performance.now() - checksumStarted
+                record(samples, 'checksum', checksumMs)
+                recordDiagnosticPhase(tickPhases, 'checksum', checksumMs)
 
                 const encodeStarted = performance.now()
                 const stateFrame = encodeStateFrame({
@@ -286,11 +354,15 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
                     events: [],
                     worldHash: null,
                 })
-                record(samples, 'stateEncode', performance.now() - encodeStarted)
+                const stateEncodeMs = performance.now() - encodeStarted
+                record(samples, 'stateEncode', stateEncodeMs)
+                recordDiagnosticPhase(tickPhases, 'stateEncode', stateEncodeMs)
 
                 const decodeStarted = performance.now()
                 const decodedState = decodeStateFrame(stateFrame)
-                record(samples, 'stateDecode', performance.now() - decodeStarted)
+                const stateDecodeMs = performance.now() - decodeStarted
+                record(samples, 'stateDecode', stateDecodeMs)
+                recordDiagnosticPhase(tickPhases, 'stateDecode', stateDecodeMs)
                 if(decodedState.checksum32 !== primaryChecksum)
                     throw new Error('state codec changed the benchmark checksum')
             }
@@ -299,10 +371,48 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
             {
                 const snapshotStarted = performance.now()
                 primarySnapshot = Uint8Array.from(primary.world.takeSnapshot())
-                record(samples, 'snapshot', performance.now() - snapshotStarted)
+                const snapshotMs = performance.now() - snapshotStarted
+                record(samples, 'snapshot', snapshotMs)
+                recordDiagnosticPhase(tickPhases, 'snapshot', snapshotMs)
             }
 
-            record(samples, 'totalTick', performance.now() - tickStarted)
+            const tickEnded = performance.now()
+            const totalTickMs = tickEnded - tickStarted
+            record(samples, 'totalTick', totalTickMs)
+            if(diagnostics && totalTickMs >= diagnosticThreshold)
+            {
+                const cpu = process.cpuUsage(tickCpuStarted)
+                const resourceEnded = process.resourceUsage()
+                const cpuUserMs = cpu.user / 1000
+                const cpuSystemMs = cpu.system / 1000
+                const accountedPhaseMs = Object.values(tickPhases)
+                    .reduce((total, value) => total + value, 0)
+                slowTicks.push({
+                    tick,
+                    fixtureTick,
+                    startTimeMs: tickStarted,
+                    endTimeMs: tickEnded,
+                    totalMs: totalTickMs,
+                    cpuUserMs,
+                    cpuSystemMs,
+                    cpuTotalMs: cpuUserMs + cpuSystemMs,
+                    phaseDurationsMs: tickPhases,
+                    accountedPhaseMs,
+                    unattributedMs: Math.max(0, totalTickMs - accountedPhaseMs),
+                    gcEvents: [],
+                    memoryAfter: readDiagnosticMemory(),
+                    voluntaryContextSwitchesDelta: Math.max(
+                        0,
+                        resourceEnded.voluntaryContextSwitches
+                            - tickResourceStarted.voluntaryContextSwitches,
+                    ),
+                    involuntaryContextSwitchesDelta: Math.max(
+                        0,
+                        resourceEnded.involuntaryContextSwitches
+                            - tickResourceStarted.involuntaryContextSwitches,
+                    ),
+                })
+            }
 
             const shadowAdvanced = shadow.world.step()
             if(shadowAdvanced !== tick)
@@ -332,11 +442,28 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
             if(tick % HASH_INTERVAL_TICKS === 0 || tick === ticks)
                 peakRssBytes = Math.max(peakRssBytes, readRssBytes())
         }
+
+        if(gcObserver !== null)
+            appendGcEntries(gcObserver.takeRecords())
     }
     finally
     {
+        gcObserver?.disconnect()
         primary.world.destroy()
         shadow.world.destroy()
+    }
+
+    if(diagnostics && gcEntries.length > 0)
+    {
+        for(const slowTick of slowTicks)
+        {
+            slowTick.gcEvents = gcEntries.filter((entry) =>
+            {
+                const entryEndTimeMs = entry.startTimeMs + entry.durationMs
+                return entry.startTimeMs < slowTick.endTimeMs
+                    && entryEndTimeMs > slowTick.startTimeMs
+            })
+        }
     }
 
     const phases = Object.fromEntries([ ...samples.entries() ]
@@ -373,19 +500,36 @@ export async function runLocalBenchmark({ ticks = DEFAULT_TICKS } = {})
             peakRssBytes,
         },
     }
+    if(diagnostics)
+    {
+        report.diagnostics = {
+            slowTickThresholdMs: diagnosticThreshold,
+            gcEventsObserved: gcEntries.length,
+            slowTicks,
+        }
+    }
     report.gates = evaluateBenchmarkGates(report)
     return report
 }
 
 function parseCli(argv)
 {
-    const options = { ticks: DEFAULT_TICKS, output: null }
+    const options = {
+        ticks: DEFAULT_TICKS,
+        output: null,
+        diagnostics: false,
+        slowTickThresholdMs: DEFAULT_SLOW_TICK_THRESHOLD_MS,
+    }
     for(const argument of argv)
     {
         if(argument.startsWith('--ticks='))
             options.ticks = Number(argument.slice('--ticks='.length))
         else if(argument.startsWith('--output='))
             options.output = argument.slice('--output='.length)
+        else if(argument === '--diagnostics')
+            options.diagnostics = true
+        else if(argument.startsWith('--slow-tick-threshold-ms='))
+            options.slowTickThresholdMs = Number(argument.slice('--slow-tick-threshold-ms='.length))
         else
             throw new Error(`unknown benchmark argument ${argument}`)
     }
@@ -397,7 +541,11 @@ async function main()
     try
     {
         const options = parseCli(process.argv.slice(2))
-        const report = await runLocalBenchmark({ ticks: options.ticks })
+        const report = await runLocalBenchmark({
+            ticks: options.ticks,
+            diagnostics: options.diagnostics,
+            slowTickThresholdMs: options.slowTickThresholdMs,
+        })
         const json = `${JSON.stringify(report, null, 2)}\n`
         if(options.output)
             await writeFile(options.output, json)

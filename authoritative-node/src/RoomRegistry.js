@@ -1,3 +1,4 @@
+import { BenchmarkNodeAuthoritativeRoom } from './BenchmarkNodeAuthoritativeRoom.js'
 import { NodeAuthoritativeRoom } from './NodeAuthoritativeRoom.js'
 
 export class RoomRegistry
@@ -7,11 +8,19 @@ export class RoomRegistry
         if(roomFactory !== undefined && typeof roomFactory !== 'function')
             throw new TypeError('roomFactory must be a function')
         this.roomOptions = roomOptions
-        this.roomFactory = roomFactory ?? ((room, onEmpty) => new NodeAuthoritativeRoom({
-            room,
-            onEmpty,
-            ...this.roomOptions,
-        }))
+        this.roomFactory = roomFactory ?? ((room, onEmpty) =>
+        {
+            const benchmarkEnabled = this.roomOptions.benchmarkToken !== null
+                && this.roomOptions.benchmarkToken !== undefined
+            const RoomClass = benchmarkEnabled
+                ? BenchmarkNodeAuthoritativeRoom
+                : NodeAuthoritativeRoom
+            return new RoomClass({
+                room,
+                onEmpty,
+                ...this.roomOptions,
+            })
+        })
         this.rooms = new Map()
         this.stopping = false
     }

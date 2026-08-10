@@ -44,12 +44,19 @@ function rejectUpgrade(socket, statusCode, message)
 export function createAuthoritativeServer({
     host = '127.0.0.1',
     port = 8080,
+    benchmarkToken = null,
     roomFactory,
     roomOptions = {},
     heartbeatIntervalMs = 30000,
 } = {})
 {
-    const registry = new RoomRegistry({ roomFactory, roomOptions })
+    const registry = new RoomRegistry({
+        roomFactory,
+        roomOptions: {
+            ...roomOptions,
+            benchmarkToken,
+        },
+    })
     const startedAt = process.hrtime.bigint()
     const webSocketServer = new WebSocketServer({
         noServer: true,
