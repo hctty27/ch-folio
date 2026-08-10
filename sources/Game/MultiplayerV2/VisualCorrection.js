@@ -93,14 +93,21 @@ export class VisualCorrection
         if(!Array.isArray(beforeStates) || !Array.isArray(afterStates))
             throw new TypeError('beforeStates and afterStates must be arrays')
 
-        this.corrections.clear()
         if(hard)
+        {
+            this.corrections.clear()
             return 0
+        }
 
-        const beforeByEntity = new Map(beforeStates.map((state) => [ state.entityOrder, state ]))
+        const renderedBeforeByEntity = new Map(beforeStates.map((state) => [
+            state.entityOrder,
+            this.apply(state),
+        ]))
+        this.corrections.clear()
+
         for(const after of afterStates)
         {
-            const before = beforeByEntity.get(after.entityOrder)
+            const before = renderedBeforeByEntity.get(after.entityOrder)
             if(!before)
                 continue
 
