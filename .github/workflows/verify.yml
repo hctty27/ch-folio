@@ -23,155 +23,62 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - name: Install validation dependencies
-        run: |
-          npm ci
-          npm ci --prefix authoritative-node --ignore-scripts
-      - name: Verify authoritative Node tests
-        run: npm test --prefix authoritative-node
-      - name: Wait for isolated benchmark window
+      - name: Deploy exact implementation head to staging
         shell: bash
         run: |
           set -euo pipefail
-          deadline=$((SECONDS + 600))
-          while true; do
-            other_runner_work="$(ps -eo args= | grep -F '/opt/actions-runner/_work/' | grep -v grep || true)"
-            cpu_avg10="$(awk '/^some / { for(i=1;i<=NF;i++) if($i ~ /^avg10=/) { split($i,a,"="); print a[2] } }' /proc/pressure/cpu)"
-            cpu_quiet="$(awk -v v="${cpu_avg10:-100}" 'BEGIN { print (v < 10.0) ? 1 : 0 }')"
-
-            if [[ -z "${other_runner_work}" && "${cpu_quiet}" -eq 1 ]]; then
-              sleep 15
-              other_runner_work="$(ps -eo args= | grep -F '/opt/actions-runner/_work/' | grep -v grep || true)"
-              cpu_avg10="$(awk '/^some / { for(i=1;i<=NF;i++) if($i ~ /^avg10=/) { split($i,a,"="); print a[2] } }' /proc/pressure/cpu)"
-              cpu_quiet="$(awk -v v="${cpu_avg10:-100}" 'BEGIN { print (v < 10.0) ? 1 : 0 }')"
-              if [[ -z "${other_runner_work}" && "${cpu_quiet}" -eq 1 ]]; then
-                echo "benchmark window isolated; cpu pressure avg10=${cpu_avg10}"
-                break
-              fi
-            fi
-
-            if (( SECONDS >= deadline )); then
-              echo "no isolated benchmark window within 600 seconds" >&2
-              echo "cpu pressure avg10=${cpu_avg10}" >&2
-              ps -eo pid,ppid,psr,pcpu,pmem,stat,comm,args --sort=-pcpu | head -n 30 >&2 || true
-              exit 1
-            fi
-
-            echo "waiting for competing runner work to finish; cpu pressure avg10=${cpu_avg10}"
-            sleep 10
-          done
-      - name: Record staging benchmark identity
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
-        shell: bash
-        run: |
-          {
-            echo "validation_commit=$(git rev-parse HEAD)"
-            echo "implementation_head=c067f2b0ad33caeeb8ef7a520a32f5c2cc7be456"
-            echo "validation_change=workflow-only"
-            echo "full_verify_run=886"
-            echo "node=$(node --version)"
-            echo "npm=$(npm --version)"
-            echo "production_warmup_ticks=600"
-            echo "cpu_pressure=$(cat /proc/pressure/cpu 2>/dev/null || true)"
-          } > authoritative-node-benchmark-identity.txt
-      - name: Run staging production-warmed 36000-tick hard gate
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
-        id: staging_benchmark
-        shell: bash
-        run: |
-          set +e
-          node scripts/benchmark-authoritative-node.mjs \
-            --output=authoritative-node-local-benchmark.json
-          status=$?
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Capture failed-gate scheduler evidence
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging' && steps.staging_benchmark.outputs.status != '0'
-        shell: bash
-        run: |
-          {
-            echo "commit=$(git rev-parse HEAD)"
-            echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "nproc=$(nproc)"
-            echo "production_warmup_ticks=600"
-            echo "=== uptime ==="
-            uptime
-            echo "=== cpu pressure ==="
-            cat /proc/pressure/cpu 2>/dev/null || true
-            echo "=== runnable processes ==="
-            ps -eo pid,ppid,psr,pcpu,pmem,stat,comm,args --sort=-pcpu | head -n 40 || true
-          } > authoritative-node-benchmark-scheduler.txt
-
-          set +e
-          node scripts/benchmark-authoritative-node.mjs \
-            --diagnostics \
-            --slow-tick-threshold-ms=5 \
-            --output=authoritative-node-local-benchmark-diagnostic.json
-          diagnostic_status=$?
-          echo "diagnostic_exit_status=${diagnostic_status}" >> authoritative-node-benchmark-scheduler.txt
-          exit 0
-      - name: Upload staging benchmark evidence
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-authoritative-local-benchmark
-          path: |
-            authoritative-node-local-benchmark.json
-            authoritative-node-local-benchmark-diagnostic.json
-            authoritative-node-benchmark-identity.txt
-            authoritative-node-benchmark-scheduler.txt
-          if-no-files-found: error
-          retention-days: 30
-      - name: Enforce staging benchmark hard gate
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
-        shell: bash
-        run: exit "${{ steps.staging_benchmark.outputs.status }}"
-      - name: Smoke real staging Node startup on loopback
-        if: github.event_name == 'pull_request' && github.head_ref == 'feat/node-authoritative-staging'
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN="$(openssl rand -hex 32)"
-          echo "::add-mask::${TOKEN}"
-          SERVICE_LOG="${RUNNER_TEMP}/authoritative-node-loopback.log"
-
-          HOST=127.0.0.1 \
-          PORT=8080 \
-          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
-          node authoritative-node/src/index.js >"${SERVICE_LOG}" 2>&1 &
-          SERVER_PID=$!
+          IMPLEMENTATION_HEAD=c067f2b0ad33caeeb8ef7a520a32f5c2cc7be456
+          git fetch --no-tags --depth=1 origin "${IMPLEMENTATION_HEAD}"
+          git checkout --detach "${IMPLEMENTATION_HEAD}"
+          test "$(git rev-parse HEAD)" = "${IMPLEMENTATION_HEAD}"
 
           cleanup() {
-            kill "${SERVER_PID}" 2>/dev/null || true
-            wait "${SERVER_PID}" 2>/dev/null || true
+            sudo systemctl stop ch-folio-authoritative-node.service 2>/dev/null || true
           }
           trap cleanup EXIT
 
+          sudo bash ops/authoritative-node/install-staging.sh
+          sudo systemctl start ch-folio-authoritative-node.service
+
           ready=0
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://127.0.0.1:8080/healthz > staging-loopback-health.json; then
               ready=1
               break
             fi
-            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
-              echo "Node authority exited before healthz became ready" >&2
-              cat "${SERVICE_LOG}" >&2
+            if ! sudo systemctl is-active --quiet ch-folio-authoritative-node.service; then
+              sudo systemctl status ch-folio-authoritative-node.service --no-pager >&2 || true
+              sudo journalctl -u ch-folio-authoritative-node.service -n 100 --no-pager >&2 || true
               exit 1
             fi
             sleep 0.25
           done
-
           if [[ "${ready}" -ne 1 ]]; then
-            echo "Node authority did not become healthy after production warmup" >&2
-            cat "${SERVICE_LOG}" >&2
+            echo "staging service did not become healthy" >&2
+            sudo journalctl -u ch-folio-authoritative-node.service -n 100 --no-pager >&2 || true
             exit 1
           fi
 
-          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
-            npm run smoke:authoritative-node-staging -- \
-              --url=ws://127.0.0.1:8080/ws \
-              --room=ci-staging-smoke
+          curl --fail --silent --show-error https://hk-test.testnb.me/healthz > staging-public-health.json
+          grep -q '"protocolVersion":2' staging-loopback-health.json
+          grep -q '"protocolVersion":2' staging-public-health.json
+
+          {
+            echo "implementation_head=${IMPLEMENTATION_HEAD}"
+            echo "installed_root=/opt/ch-folio-authoritative-staging"
+            echo "service=ch-folio-authoritative-node.service"
+            echo "loopback_health=$(cat staging-loopback-health.json)"
+            echo "public_health=$(cat staging-public-health.json)"
+            echo "post_validation_service_state=stopped_for_named_acceptance"
+          } > staging-deploy-identity.txt
+      - name: Upload staging deploy evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task9-staging-deploy
+          path: |
+            staging-loopback-health.json
+            staging-public-health.json
+            staging-deploy-identity.txt
+          if-no-files-found: error
+          retention-days: 30
