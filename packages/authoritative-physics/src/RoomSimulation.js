@@ -260,7 +260,7 @@ export class RoomSimulation
         if(slot.lastConsumedInputTick !== null && queued.clientTick <= slot.lastConsumedInputTick)
         {
             this.lateInputCount++
-            return false
+            queued.clientTick = (slot.lastConsumedInputTick + 1) >>> 0
         }
 
         const existing = slot.queuedInputs.get(queued.clientTick)
