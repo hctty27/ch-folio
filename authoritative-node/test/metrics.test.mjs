@@ -161,6 +161,49 @@ test('benchmark retains only the latest 36000 completed ticks', () =>
     assert.equal(summary.slowTicks.some(({ tick }) => tick === 1), false)
 })
 
+test('benchmark reset clears measurement-only counters and preserves operational window', () =>
+{
+    const metrics = new Metrics()
+    metrics.recordPhase('totalTick', 20)
+    metrics.recordDiagnostic('totalTickCpuMs', 10)
+    metrics.recordQueueDepth(4)
+    metrics.setSlots(8)
+    metrics.recordSchedulerCallback(5, 3)
+    metrics.recordDisconnect()
+    metrics.recordInputQueueDiagnostics({
+        futureInputCount: 4,
+        futureLeadMaxTicks: 9,
+        staleInputCount: 0,
+        lateInputCount: 3,
+    })
+    metrics.completeTick(1)
+
+    metrics.resetBenchmark()
+
+    const benchmark = metrics.readBenchmarkSummary()
+    assert.equal(benchmark.ticks, 0)
+    assert.deepEqual(benchmark.phases, {})
+    assert.deepEqual(benchmark.slowTicks, [])
+    assert.deepEqual(benchmark.scheduler, {
+        callbacks: 0,
+        catchUpTicks: 0,
+        overloadCallbacks: 0,
+        maxDueTicks: 0,
+    })
+    assert.equal(benchmark.disconnects, 0)
+    assert.equal(benchmark.gauges.queueDepth, 4)
+    assert.equal(benchmark.gauges.maxQueueDepth, 4)
+    assert.equal(benchmark.gauges.slots, 8)
+    assert.equal(benchmark.gauges.maxSlots, 8)
+    assert.equal(benchmark.gauges.lateInputCount, 3)
+    assert.equal(benchmark.gauges.lateInputRate, 0)
+
+    metrics.recordPhase('totalTick', 1)
+    const operational = metrics.completeTick(2)
+    assert.equal(operational, null)
+    assert.equal(metrics.windowStartTick, 1)
+})
+
 test('metrics reject invalid durations and counters', () =>
 {
     const metrics = new Metrics()
