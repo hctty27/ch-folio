@@ -1,5 +1,6 @@
 import { Metrics as MetricsBase } from './MetricsBase.js'
 
+const SUMMARY_TICKS = 600
 const BENCHMARK_TICKS = 36_000
 const PERSISTENT_GROWTH_TICKS = 60
 
@@ -10,45 +11,132 @@ function nonNegativeInteger(value, label)
     return value
 }
 
-function maximum(samples, field)
+class QueueDiagnosticsRing
 {
-    return samples.reduce(
-        (current, sample) => Math.max(current, sample[field]),
-        0,
-    )
-}
-
-function hasPersistentGrowth(samples)
-{
-    let growthTransitions = 0
-    for(let index = samples.length - 1; index > 0; index--)
+    constructor(capacity)
     {
-        if(samples[index].futureInputCount <= samples[index - 1].futureInputCount)
-            break
-        growthTransitions++
-        if(growthTransitions >= PERSISTENT_GROWTH_TICKS)
-            return true
+        this.capacity = capacity
+        this.futureInputCounts = new Float64Array(capacity)
+        this.futureLeadMaxTicks = new Float64Array(capacity)
+        this.staleInputCounts = new Float64Array(capacity)
+        this.lateInputCounts = new Float64Array(capacity)
+        this.clear(0)
     }
-    return false
-}
 
-function queueGauges(samples, lateInputBaseline)
-{
-    const current = samples.at(-1) ?? {
-        futureInputCount: 0,
-        futureLeadMaxTicks: 0,
-        staleInputCount: 0,
-        lateInputCount: lateInputBaseline,
+    push(diagnostics)
+    {
+        let index
+        if(this.length < this.capacity)
+        {
+            index = (this.start + this.length) % this.capacity
+            this.length++
+        }
+        else
+        {
+            index = this.start
+            this.lateInputBaseline = this.lateInputCounts[index]
+            this.start = (this.start + 1) % this.capacity
+        }
+
+        this.futureInputCounts[index] = diagnostics.futureInputCount
+        this.futureLeadMaxTicks[index] = diagnostics.futureLeadMaxTicks
+        this.staleInputCounts[index] = diagnostics.staleInputCount
+        this.lateInputCounts[index] = diagnostics.lateInputCount
     }
-    const lateInputs = Math.max(0, current.lateInputCount - lateInputBaseline)
-    return {
-        futureInputCount: current.futureInputCount,
-        futureInputCountMax: maximum(samples, 'futureInputCount'),
-        futureLeadMaxTicks: maximum(samples, 'futureLeadMaxTicks'),
-        staleInputMax: maximum(samples, 'staleInputCount'),
-        lateInputCount: current.lateInputCount,
-        lateInputRate: samples.length === 0 ? 0 : lateInputs / samples.length,
-        persistentFutureQueueGrowth: hasPersistentGrowth(samples),
+
+    clear(lateInputBaseline)
+    {
+        this.start = 0
+        this.length = 0
+        this.lateInputBaseline = lateInputBaseline
+    }
+
+    readGauges()
+    {
+        if(this.length === 0)
+        {
+            return {
+                futureInputCount: 0,
+                futureInputCountMax: 0,
+                futureLeadMaxTicks: 0,
+                staleInputMax: 0,
+                lateInputCount: this.lateInputBaseline,
+                lateInputRate: 0,
+                persistentFutureQueueGrowth: false,
+            }
+        }
+
+        let futureInputCountMax = 0
+        let futureLeadMaxTicks = 0
+        let staleInputMax = 0
+        for(let offset = 0; offset < this.length; offset++)
+        {
+            const index = this.index(offset)
+            futureInputCountMax = Math.max(
+                futureInputCountMax,
+                this.futureInputCounts[index],
+            )
+            futureLeadMaxTicks = Math.max(
+                futureLeadMaxTicks,
+                this.futureLeadMaxTicks[index],
+            )
+            staleInputMax = Math.max(
+                staleInputMax,
+                this.staleInputCounts[index],
+            )
+        }
+
+        const latestIndex = this.index(this.length - 1)
+        const lateInputCount = this.lateInputCounts[latestIndex]
+        return {
+            futureInputCount: this.futureInputCounts[latestIndex],
+            futureInputCountMax,
+            futureLeadMaxTicks,
+            staleInputMax,
+            lateInputCount,
+            lateInputRate: Math.max(
+                0,
+                lateInputCount - this.lateInputBaseline,
+            ) / this.length,
+            persistentFutureQueueGrowth: this.hasPersistentGrowth(),
+        }
+    }
+
+    hasPersistentGrowth()
+    {
+        let growthTransitions = 0
+        for(let offset = this.length - 1; offset > 0; offset--)
+        {
+            if(
+                this.futureInputCounts[this.index(offset)]
+                <= this.futureInputCounts[this.index(offset - 1)]
+            )
+                break
+
+            growthTransitions++
+            if(growthTransitions >= PERSISTENT_GROWTH_TICKS)
+                return true
+        }
+        return false
+    }
+
+    index(offset)
+    {
+        return (this.start + offset) % this.capacity
+    }
+
+    *[Symbol.iterator]()
+    {
+        for(let offset = 0; offset < this.length; offset++)
+        {
+            const index = this.index(offset)
+            yield {
+                futureInputCount: this.futureInputCounts[index],
+                futureLeadMaxTicks: this.futureLeadMaxTicks[index],
+                staleInputCount: this.staleInputCounts[index],
+                lateInputCount: this.lateInputCounts[index],
+            }
+        }
     }
 }
 
@@ -56,61 +144,50 @@ export class Metrics extends MetricsBase
 {
     recordInputQueueDiagnostics(value)
     {
-        const diagnostics = {
-            futureInputCount: nonNegativeInteger(
-                value?.futureInputCount,
-                'futureInputCount',
-            ),
-            futureLeadMaxTicks: nonNegativeInteger(
-                value?.futureLeadMaxTicks,
-                'futureLeadMaxTicks',
-            ),
-            staleInputCount: nonNegativeInteger(
-                value?.staleInputCount,
-                'staleInputCount',
-            ),
-            lateInputCount: nonNegativeInteger(
-                value?.lateInputCount,
-                'lateInputCount',
-            ),
-        }
-        if(diagnostics.lateInputCount < this.inputQueueDiagnostics.lateInputCount)
+        const futureInputCount = nonNegativeInteger(
+            value?.futureInputCount,
+            'futureInputCount',
+        )
+        const futureLeadMaxTicks = nonNegativeInteger(
+            value?.futureLeadMaxTicks,
+            'futureLeadMaxTicks',
+        )
+        const staleInputCount = nonNegativeInteger(
+            value?.staleInputCount,
+            'staleInputCount',
+        )
+        const lateInputCount = nonNegativeInteger(
+            value?.lateInputCount,
+            'lateInputCount',
+        )
+        if(lateInputCount < this.inputQueueDiagnostics.lateInputCount)
             throw new RangeError('lateInputCount must not decrease')
 
         this.inputQueueDiagnosticsEnabled = true
-        this.inputQueueDiagnostics = diagnostics
-        return diagnostics
+        this.inputQueueDiagnostics.futureInputCount = futureInputCount
+        this.inputQueueDiagnostics.futureLeadMaxTicks = futureLeadMaxTicks
+        this.inputQueueDiagnostics.staleInputCount = staleInputCount
+        this.inputQueueDiagnostics.lateInputCount = lateInputCount
+        return this.inputQueueDiagnostics
     }
 
     completeTick(tick)
     {
         const enabled = this.inputQueueDiagnosticsEnabled
-        const sample = enabled ? { ...this.inputQueueDiagnostics } : null
         if(enabled)
-            this.windowInputQueueSamples.push(sample)
-
-        const summary = super.completeTick(tick)
-
-        if(!enabled)
-            return summary
-
-        this.benchmarkInputQueueSamples.push(sample)
-        if(this.benchmarkInputQueueSamples.length > BENCHMARK_TICKS)
         {
-            const removed = this.benchmarkInputQueueSamples.shift()
-            this.benchmarkLateInputBaseline = removed.lateInputCount
+            this.windowInputQueueSamples.push(this.inputQueueDiagnostics)
+            this.benchmarkInputQueueSamples.push(this.inputQueueDiagnostics)
         }
 
-        if(summary)
+        const summary = super.completeTick(tick)
+        if(enabled && summary)
         {
             Object.assign(
                 summary.gauges,
-                queueGauges(
-                    this.completedWindowInputQueueSamples ?? [],
-                    this.completedWindowLateInputBaseline,
-                ),
+                this.completedWindowQueueGauges,
             )
-            this.completedWindowInputQueueSamples = null
+            this.completedWindowQueueGauges = null
         }
         return summary
     }
@@ -122,10 +199,7 @@ export class Metrics extends MetricsBase
         {
             Object.assign(
                 summary.gauges,
-                queueGauges(
-                    this.benchmarkInputQueueSamples,
-                    this.benchmarkLateInputBaseline,
-                ),
+                this.benchmarkInputQueueSamples.readGauges(),
             )
         }
         return summary
@@ -135,28 +209,32 @@ export class Metrics extends MetricsBase
     {
         super.reset()
         this.inputQueueDiagnosticsEnabled = false
-        this.inputQueueDiagnostics = {
+        this.inputQueueDiagnostics ??= {
             futureInputCount: 0,
             futureLeadMaxTicks: 0,
             staleInputCount: 0,
             lateInputCount: 0,
         }
-        this.benchmarkInputQueueSamples = []
-        this.benchmarkLateInputBaseline = 0
-        this.windowInputQueueSamples = []
-        this.windowLateInputBaseline = 0
-        this.completedWindowInputQueueSamples = null
-        this.completedWindowLateInputBaseline = 0
+        this.inputQueueDiagnostics.futureInputCount = 0
+        this.inputQueueDiagnostics.futureLeadMaxTicks = 0
+        this.inputQueueDiagnostics.staleInputCount = 0
+        this.inputQueueDiagnostics.lateInputCount = 0
+
+        this.windowInputQueueSamples ??= new QueueDiagnosticsRing(SUMMARY_TICKS)
+        this.benchmarkInputQueueSamples ??= new QueueDiagnosticsRing(BENCHMARK_TICKS)
+        this.windowInputQueueSamples.clear(0)
+        this.benchmarkInputQueueSamples.clear(0)
+        this.completedWindowQueueGauges = null
     }
 
     resetWindow()
     {
-        const completedSamples = this.windowInputQueueSamples ?? []
-        const completedLateInputBaseline = this.windowLateInputBaseline ?? 0
+        this.completedWindowQueueGauges = this.inputQueueDiagnosticsEnabled
+            ? this.windowInputQueueSamples.readGauges()
+            : null
         super.resetWindow()
-        this.completedWindowInputQueueSamples = completedSamples
-        this.completedWindowLateInputBaseline = completedLateInputBaseline
-        this.windowInputQueueSamples = []
-        this.windowLateInputBaseline = this.inputQueueDiagnostics?.lateInputCount ?? 0
+        this.windowInputQueueSamples.clear(
+            this.inputQueueDiagnostics?.lateInputCount ?? 0,
+        )
     }
 }
