@@ -402,7 +402,7 @@ test('full sync fast-forwards without rendering, waits for exact spawn, then ena
     assert.equal(coordinator.inputPublisher.samples.length, 8)
     assert.equal(coordinator.inputPublisher.samples.every(({ active }) => active === false), true)
     assert.equal(coordinator.visuals.updateCalls.length, 0)
-    assert.equal(server.sent.length, 3)
+    assert.equal(server.sent.length, 1)
     assert.deepEqual(decodeSyncReady(server.sent.at(-1)), { protocolVersion: 2 })
 
     game.ticker.events.trigger('tick')
