@@ -1,7 +1,10 @@
 import { performance } from 'node:perf_hooks'
 import { cpuUsage, resourceUsage } from 'node:process'
 
-import { encodeStateFrame } from '@ch-folio/authoritative-physics'
+import {
+    BENCHMARK_FRAME_TYPES,
+    encodeStateFrame,
+} from '@ch-folio/authoritative-physics'
 import { NodeAuthoritativeRoom } from './NodeAuthoritativeRoom.js'
 
 function cpuMilliseconds(started)
@@ -26,6 +29,35 @@ function contextSwitchDelta(started, completed)
 
 export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
 {
+    async acceptBenchmarkSummary(socket, bytes)
+    {
+        const rawSafeSend = this.safeSend
+        let summarySent = false
+        this.safeSend = (target, frame) =>
+        {
+            const sent = rawSafeSend.call(this, target, frame)
+            if(
+                sent
+                && target === socket
+                && frame?.[0] === BENCHMARK_FRAME_TYPES.SUMMARY
+            )
+                summarySent = true
+            return sent
+        }
+
+        try
+        {
+            await super.acceptBenchmarkSummary(socket, bytes)
+        }
+        finally
+        {
+            this.safeSend = rawSafeSend
+        }
+
+        if(summarySent)
+            this.metrics.resetBenchmark()
+    }
+
     ensureRuntime()
     {
         const alreadyLoaded = this.simulation !== null
