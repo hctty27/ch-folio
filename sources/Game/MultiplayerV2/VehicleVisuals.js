@@ -90,6 +90,7 @@ export class VehicleVisuals
         this.RemoteVehicleClass = RemoteVehicleClass
         this.SnapshotBufferClass = SnapshotBufferClass
         this.correction = correction
+        this.correctionCount = 0
         this.remoteVehicles = new Map()
         this.remoteBuffers = new Map()
         this.localEntityOrder = null
@@ -126,7 +127,9 @@ export class VehicleVisuals
     {
         if(this.destroyed)
             return 0
-        return this.correction.capture(beforeStates, afterStates, options)
+        const count = this.correction.capture(beforeStates, afterStates, options)
+        this.correctionCount += count
+        return count
     }
 
     createRemote(entityOrder)
