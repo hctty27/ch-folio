@@ -7,11 +7,18 @@
     "noEmit": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": false
+    "allowImportingTsExtensions": false,
+    "allowJs": true,
+    "checkJs": false,
+    "resolveJsonModule": true,
+    "types": [
+      "@cloudflare/vitest-pool-workers/types"
+    ]
   },
   "include": [
     "src/**/*.ts",
     "test/**/*.ts",
+    "../packages/authoritative-physics/src/**/*.js",
     "worker-configuration.d.ts"
   ]
 }

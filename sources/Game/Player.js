@@ -19,6 +19,7 @@ export class Player
         this.steering = 0
         this.boosting = 0
         this.braking = 0
+        this.honking = 0
         this.suspensions = ['low', 'low', 'low', 'low']
 
         const respawn = this.game.respawns.getDefault()
@@ -525,6 +526,7 @@ export class Player
         this.steering = 0
         this.boosting = 0
         this.braking = 0
+        this.honking = 0
 
         if(this.state !== Player.STATE_DEFAULT)
             return
@@ -543,6 +545,8 @@ export class Player
          */
         if(this.game.inputs.actions.get('boost').active)
             this.boosting = 1
+
+        this.honking = this.game.inputs.actions.get('honk').active ? 1 : 0
 
         /**
          * Braking
