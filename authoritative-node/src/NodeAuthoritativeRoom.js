@@ -6,8 +6,14 @@ export class NodeAuthoritativeRoom extends NodeAuthoritativeRoomBase
     {
         if(this.simulation !== null)
         {
+            this.inputQueueDiagnosticsScratch ??= {
+                futureInputCount: 0,
+                futureLeadMaxTicks: 0,
+                staleInputCount: 0,
+                lateInputCount: 0,
+            }
             this.metrics.recordInputQueueDiagnostics(
-                this.simulation.inputQueueDiagnostics(),
+                this.simulation.inputQueueDiagnostics(this.inputQueueDiagnosticsScratch),
             )
         }
         return super.readQueueDepth()
