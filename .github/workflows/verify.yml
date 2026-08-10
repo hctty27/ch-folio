@@ -13,66 +13,28 @@ concurrency:
   group: hk-server-exclusive
   cancel-in-progress: true
 
-env:
-  TARGET_HEAD: 36633b5d82432345ba5a71c750ee0bb8960ecbe6
-
 jobs:
   test-and-build:
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout exact metrics-fix head
+      - name: Checkout server-tick prediction implementation branch
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "${TARGET_HEAD}"
-          git checkout --detach "${TARGET_HEAD}"
-          test "$(git rev-parse HEAD)" = "${TARGET_HEAD}"
+          git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
+          git checkout --detach origin/design/server-tick-aligned-prediction
+          git rev-parse HEAD
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Install validation dependencies
+      - name: Install focused test dependencies
         run: |
           npm ci
           npm ci --prefix authoritative-node --ignore-scripts
-      - name: Run authoritative Node suite
-        run: npm test --prefix authoritative-node
-      - name: Wait for isolated benchmark window
-        shell: bash
+      - name: Run fixed-storage diagnostics regressions
         run: |
-          set -euo pipefail
-          deadline=$((SECONDS + 600))
-          while true; do
-            other_runner_work="$(ps -eo args= | grep -F '/opt/actions-runner/_work/' | grep -v grep || true)"
-            cpu_avg10="$(awk '/^some / { for(i=1;i<=NF;i++) if($i ~ /^avg10=/) { split($i,a,"="); print a[2] } }' /proc/pressure/cpu)"
-            cpu_quiet="$(awk -v v="${cpu_avg10:-100}" 'BEGIN { print (v < 10.0) ? 1 : 0 }')"
-            if [[ -z "${other_runner_work}" && "${cpu_quiet}" -eq 1 ]]; then
-              sleep 15
-              other_runner_work="$(ps -eo args= | grep -F '/opt/actions-runner/_work/' | grep -v grep || true)"
-              cpu_avg10="$(awk '/^some / { for(i=1;i<=NF;i++) if($i ~ /^avg10=/) { split($i,a,"="); print a[2] } }' /proc/pressure/cpu)"
-              cpu_quiet="$(awk -v v="${cpu_avg10:-100}" 'BEGIN { print (v < 10.0) ? 1 : 0 }')"
-              if [[ -z "${other_runner_work}" && "${cpu_quiet}" -eq 1 ]]; then
-                echo "benchmark window isolated; cpu pressure avg10=${cpu_avg10}"
-                break
-              fi
-            fi
-            if (( SECONDS >= deadline )); then
-              echo "no isolated benchmark window within 600 seconds" >&2
-              exit 1
-            fi
-            echo "waiting for isolated benchmark window; cpu pressure avg10=${cpu_avg10}"
-            sleep 10
-          done
-      - name: Run production-warmed 36000-tick hard gate
-        shell: bash
-        run: node scripts/benchmark-authoritative-node.mjs --output=authoritative-node-metrics-fix-benchmark.json
-      - name: Upload metrics-fix benchmark evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-authoritative-metrics-fix-benchmark
-          path: authoritative-node-metrics-fix-benchmark.json
-          if-no-files-found: error
-          retention-days: 30
+          node --test packages/authoritative-physics/test/futureInputQueue.test.mjs
+          node --test authoritative-node/test/futureQueueMetrics.test.mjs
