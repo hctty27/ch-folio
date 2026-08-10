@@ -116,7 +116,7 @@ function readWheelContacts(vehicle)
         const inContact = controller.wheelIsInContact(wheelIndex)
         return {
             inContact,
-            contactPoint: inContact ? vector(controller.wheelContactPoint(wheelIndex)) : null,
+            contactPoint: vector(controller.wheelContactPoint(wheelIndex)),
             suspensionLength: controller.wheelSuspensionLength(wheelIndex),
         }
     })
