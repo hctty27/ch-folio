@@ -20,65 +20,42 @@ concurrency:
 jobs:
   test-and-build:
     runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy exact implementation head to staging
+      - name: Inspect current staging process ownership
         shell: bash
         run: |
           set -euo pipefail
-          IMPLEMENTATION_HEAD=c067f2b0ad33caeeb8ef7a520a32f5c2cc7be456
-          git fetch --no-tags --depth=1 origin "${IMPLEMENTATION_HEAD}"
-          git checkout --detach "${IMPLEMENTATION_HEAD}"
-          test "$(git rev-parse HEAD)" = "${IMPLEMENTATION_HEAD}"
-
-          cleanup() {
-            sudo systemctl stop ch-folio-authoritative-node.service 2>/dev/null || true
-          }
-          trap cleanup EXIT
-
-          sudo bash ops/authoritative-node/install-staging.sh
-          sudo systemctl start ch-folio-authoritative-node.service
-
-          ready=0
-          for attempt in $(seq 1 120); do
-            if curl --fail --silent http://127.0.0.1:8080/healthz > staging-loopback-health.json; then
-              ready=1
-              break
-            fi
-            if ! sudo systemctl is-active --quiet ch-folio-authoritative-node.service; then
-              sudo systemctl status ch-folio-authoritative-node.service --no-pager >&2 || true
-              sudo journalctl -u ch-folio-authoritative-node.service -n 100 --no-pager >&2 || true
-              exit 1
-            fi
-            sleep 0.25
-          done
-          if [[ "${ready}" -ne 1 ]]; then
-            echo "staging service did not become healthy" >&2
-            sudo journalctl -u ch-folio-authoritative-node.service -n 100 --no-pager >&2 || true
-            exit 1
-          fi
-
-          curl --fail --silent --show-error https://hk-test.testnb.me/healthz > staging-public-health.json
-          grep -q '"protocolVersion":2' staging-loopback-health.json
-          grep -q '"protocolVersion":2' staging-public-health.json
-
           {
-            echo "implementation_head=${IMPLEMENTATION_HEAD}"
-            echo "installed_root=/opt/ch-folio-authoritative-staging"
-            echo "service=ch-folio-authoritative-node.service"
-            echo "loopback_health=$(cat staging-loopback-health.json)"
-            echo "public_health=$(cat staging-public-health.json)"
-            echo "post_validation_service_state=stopped_for_named_acceptance"
-          } > staging-deploy-identity.txt
-      - name: Upload staging deploy evidence
-        if: always()
+            echo "runner_user=$(id -un)"
+            echo "runner_uid=$(id -u)"
+            echo "=== port 8080 ==="
+            ss -H -ltnp '( sport = :8080 )' || true
+            echo "=== systemd ==="
+            systemctl is-active ch-folio-authoritative-node.service 2>&1 || true
+            systemctl show ch-folio-authoritative-node.service -p MainPID -p User -p Group -p ExecStart -p Restart 2>&1 || true
+
+            pid="$(ss -H -ltnp '( sport = :8080 )' 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+            echo "port_pid=${pid:-none}"
+            if [[ -n "${pid}" ]]; then
+              echo "=== process ==="
+              ps -o user=,uid=,pid=,ppid=,stat=,comm=,args= -p "${pid}" || true
+              echo "cwd=$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || true)"
+              echo "exe=$(readlink -f "/proc/${pid}/exe" 2>/dev/null || true)"
+              if kill -0 "${pid}" 2>/dev/null; then
+                echo "runner_can_signal_port_pid=yes"
+              else
+                echo "runner_can_signal_port_pid=no"
+              fi
+            fi
+            echo "=== health ==="
+            curl --fail --silent --show-error http://127.0.0.1:8080/healthz || true
+          } | tee staging-port-inspection.txt
+      - name: Upload staging port inspection
         uses: actions/upload-artifact@v4
         with:
-          name: task9-staging-deploy
-          path: |
-            staging-loopback-health.json
-            staging-public-health.json
-            staging-deploy-identity.txt
+          name: task9-staging-port-inspection
+          path: staging-port-inspection.txt
           if-no-files-found: error
           retention-days: 30
