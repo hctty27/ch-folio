@@ -24,6 +24,8 @@ import {
 const TICK_RATE_HZ = 60
 const STATE_INTERVAL_TICKS = 3
 const INITIAL_PREDICTION_LEAD_TICKS = 8
+export const NETWORK_WARMUP_TICKS = 600
+const NETWORK_WARMUP_SECONDS = NETWORK_WARMUP_TICKS / TICK_RATE_HZ
 
 function uint32(value)
 {
@@ -308,6 +310,19 @@ async function runInputSchedule(clients, seconds, aggregate)
     return { ticks, wallDurationMs: performance.now() - started }
 }
 
+function resetClientMeasurementAggregate(aggregate)
+{
+    aggregate.stateFrames = 0
+    aggregate.stateGaps = 0
+    aggregate.backlogPersistent = 0
+    aggregate.checksumMismatches = 0
+    aggregate.crossClientMismatches.clear()
+    aggregate.hashMismatches.clear()
+    aggregate.byTick.clear()
+    aggregate.worldHashes.clear()
+    aggregate.sendDeadlineMisses = 0
+}
+
 export async function runServerTickAlignedNodeLoadTest(options)
 {
     const url = buildNodeBenchmarkWebSocketUrl(options.url, options.room)
@@ -339,6 +354,21 @@ export async function runServerTickAlignedNodeLoadTest(options)
             'all eight authoritative spawns',
         )
 
+        const warmup = await runInputSchedule(
+            clients,
+            NETWORK_WARMUP_SECONDS,
+            aggregate,
+        )
+        const warmupSummary = await clients[0].requestSummary(options.token)
+        if(warmupSummary.mode !== 'node')
+        {
+            throw new Error(
+                `expected Node warmup summary, received ${warmupSummary.mode ?? 'unknown'}`,
+            )
+        }
+        resetClientMeasurementAggregate(aggregate)
+
+        const measurementStartedAt = new Date().toISOString()
         const schedule = await runInputSchedule(clients, options.seconds, aggregate)
         const serverSummary = await clients[0].requestSummary(options.token)
         if(serverSummary.mode !== 'node')
@@ -360,10 +390,13 @@ export async function runServerTickAlignedNodeLoadTest(options)
                 expectedStateRateHz: 20,
                 commandLeadTicks: INITIAL_PREDICTION_LEAD_TICKS,
                 inputBufferTicks: INPUT_BUFFER_TICKS,
+                networkWarmupTicks: warmup.ticks,
+                networkWarmupSeconds: NETWORK_WARMUP_SECONDS,
+                warmupServerTick: warmupSummary.currentTick,
                 commit: options.commit,
                 endpoint: `${url.protocol}//${url.host}${url.pathname}`,
                 tokenConfigured: true,
-                startedAt: new Date().toISOString(),
+                startedAt: measurementStartedAt,
                 sentTicks: schedule.ticks,
                 wallDurationMs: schedule.wallDurationMs,
             },
