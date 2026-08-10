@@ -34,5 +34,7 @@ jobs:
         run: |
           npm ci
           npm ci --prefix authoritative-node --ignore-scripts
-      - name: Run benchmark reset RED
-        run: node --test authoritative-node/test/metrics.test.mjs
+      - name: Run benchmark measurement boundary regressions
+        run: |
+          node --test authoritative-node/test/metrics.test.mjs
+          node --test authoritative-node/test/benchmarkMeasurementBoundary.test.mjs
