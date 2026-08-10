@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -7,6 +8,11 @@ import {
     RoomSimulation,
     quantizeInput,
 } from '../src/index.js'
+
+const mapData = JSON.parse(await readFile(
+    new URL('../generated/map-v1.json', import.meta.url),
+    'utf8',
+))
 
 class FakeWorld
 {
@@ -40,14 +46,11 @@ function createActiveRoom()
 {
     const room = new RoomSimulation({
         world: new FakeWorld(),
-        mapData: {
-            mapCollisionVersion: 1,
-            spawns: [ { position: [ 0, 0, 0 ], quaternion: [ 0, 0, 0, 1 ] } ],
-        },
+        mapData,
         findSpawn: () => ({
             index: 0,
-            position: [ 0, 0, 0 ],
-            quaternion: [ 0, 0, 0, 1 ],
+            position: [ ...mapData.spawns[0].position ],
+            quaternion: [ ...mapData.spawns[0].quaternion ],
         }),
     })
     const reserved = room.reserveSlot({ playerId: 1 })
