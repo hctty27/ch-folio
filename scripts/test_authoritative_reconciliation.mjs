@@ -113,7 +113,7 @@ function createPrediction()
     return prediction
 }
 
-test('matching authoritative state confirms input without rollback', async () =>
+test('matching authoritative local state confirms input without rollback', async () =>
 {
     const prediction = createPrediction()
     const acknowledgements = []
@@ -127,7 +127,12 @@ test('matching authoritative state confirms input without rollback', async () =>
     })
 
     for(let tick = 1; tick <= 3; tick++)
-        reconciler.predict({ inputs: [ { entityOrder: 1, input: makeInput(tick, tick, 0.1) } ] })
+    {
+        reconciler.predict({
+            predictionTick: tick,
+            inputs: [ { entityOrder: 1, input: makeInput(tick, tick, 0.1) } ],
+        })
+    }
 
     const before = prediction.world.takeSnapshot()
     const result = await reconciler.reconcileState(stateFrame(prediction))
@@ -137,6 +142,13 @@ test('matching authoritative state confirms input without rollback', async () =>
         serverTick: 3,
         currentTick: 3,
         rolledBack: false,
+        replayedTicks: 0,
+        error: {
+            position: 0,
+            rotation: 0,
+            linearVelocity: 0,
+            angularVelocity: 0,
+        },
     })
     assert.deepEqual(acknowledgements, [ 4 ])
     assert.equal(corrections.length, 0)
@@ -145,44 +157,36 @@ test('matching authoritative state confirms input without rollback', async () =>
     prediction.destroy()
 })
 
-test('checksum mismatch restores the authoritative tick and replays with bounded native-controller residual', async () =>
+test('whole-world checksum mismatch is diagnostic when local owner matches', async () =>
 {
-    const server = createPrediction()
-    const client = createPrediction()
+    const prediction = createPrediction()
     const corrections = []
     const reconciler = new Reconciler({
-        predictionWorld: client,
+        predictionWorld: prediction,
         localEntityOrder: 1,
         checkpointIntervalTicks: 1,
-        reconcileVisuals: (before, after, options) => corrections.push({ before, after, options }),
+        reconcileVisuals: (...args) => corrections.push(args),
     })
 
-    let authoritativeFrame = null
-    for(let tick = 1; tick <= 6; tick++)
+    for(let tick = 1; tick <= 3; tick++)
     {
-        const serverInput = makeInput(tick, tick, 0.1)
-        const clientInput = makeInput(tick, tick, tick === 3 ? 0.9 : 0.1)
-        server.step({ inputs: [ { entityOrder: 1, input: serverInput } ] })
-        reconciler.predict({ inputs: [ { entityOrder: 1, input: clientInput } ] })
-        if(tick === 3)
-            authoritativeFrame = stateFrame(server)
+        reconciler.predict({
+            predictionTick: tick,
+            inputs: [ { entityOrder: 1, input: makeInput(tick, tick, 0.1) } ],
+        })
     }
 
-    const expected = server.readState().map(physicalState)
-    assert.notDeepEqual(client.readState().map(physicalState), expected)
+    const checksum32 = (prediction.checksum() ^ 0xffffffff) >>> 0
+    const result = await reconciler.reconcileState(stateFrame(prediction, { checksum32 }))
 
-    const result = await reconciler.reconcileState(authoritativeFrame)
-    assert.equal(result.status, 'rolled-back')
-    assert.equal(result.serverTick, 3)
-    assert.equal(result.currentTick, 6)
-    assert.equal(result.replayedTicks, 3)
-    assertBoundedNativeControllerReplay(client.readState().map(physicalState), expected)
-    assert.equal(corrections.length, 1)
-    assert.equal(corrections[0].options.hard, false)
+    assert.equal(result.status, 'confirmed')
+    assert.equal(result.rolledBack, false)
+    assert.equal(reconciler.rollbackCount, 0)
+    assert.equal(reconciler.lastAuthoritativeDiagnostics.checksum32, checksum32)
+    assert.equal(corrections.length, 0)
 
     reconciler.destroy()
-    server.destroy()
-    client.destroy()
+    prediction.destroy()
 })
 
 test('state older than the rollback window requests a hard sync without mutating prediction', async () =>
@@ -201,7 +205,12 @@ test('state older than the rollback window requests a hard sync without mutating
     server.step({ inputs: [ { entityOrder: 1, input: makeInput(1, 1, -0.2) } ] })
     const oldFrame = stateFrame(server)
     for(let tick = 1; tick <= 5; tick++)
-        reconciler.predict({ inputs: [ { entityOrder: 1, input: makeInput(tick, tick, 0.7) } ] })
+    {
+        reconciler.predict({
+            predictionTick: tick,
+            inputs: [ { entityOrder: 1, input: makeInput(tick, tick, 0.7) } ],
+        })
+    }
 
     const before = client.world.takeSnapshot()
     const result = await reconciler.reconcileState(oldFrame)
@@ -211,6 +220,9 @@ test('state older than the rollback window requests a hard sync without mutating
         reason: 'rollback-window-exceeded',
         serverTick: 1,
         currentTick: 5,
+        rolledBack: false,
+        replayedTicks: 0,
+        error: null,
     })
     assert.deepEqual(requests, [ 'rollback-window-exceeded' ])
     assert.deepEqual(client.world.takeSnapshot(), before)
@@ -220,7 +232,7 @@ test('state older than the rollback window requests a hard sync without mutating
     client.destroy()
 })
 
-test('world hash mismatch requests full sync before accepting an otherwise matching frame', async () =>
+test('world hash mismatch remains diagnostic during normal owner reconciliation', async () =>
 {
     const prediction = createPrediction()
     const requests = []
@@ -231,24 +243,27 @@ test('world hash mismatch requests full sync before accepting an otherwise match
         requestFullSync: (reason) => requests.push(reason),
     })
 
-    reconciler.predict({ inputs: [ { entityOrder: 1, input: makeInput(1, 1, 0.1) } ] })
+    reconciler.predict({
+        predictionTick: 1,
+        inputs: [ { entityOrder: 1, input: makeInput(1, 1, 0.1) } ],
+    })
     const snapshotHash = await hashWorldSnapshot(prediction.createCheckpoint().snapshot)
     const wrongHash = Uint8Array.from(snapshotHash)
     wrongHash[0] ^= 0xff
+    const worldHash = { hashTick: 1, sha256: wrongHash }
 
-    const result = await reconciler.reconcileState(stateFrame(prediction, {
-        worldHash: { hashTick: 1, sha256: wrongHash },
-    }))
+    const result = await reconciler.reconcileState(stateFrame(prediction, { worldHash }))
 
-    assert.equal(result.status, 'hard-sync-requested')
-    assert.equal(result.reason, 'world-hash-mismatch')
-    assert.deepEqual(requests, [ 'world-hash-mismatch' ])
+    assert.equal(result.status, 'confirmed')
+    assert.equal(result.rolledBack, false)
+    assert.deepEqual(requests, [])
+    assert.deepEqual(reconciler.lastAuthoritativeDiagnostics.worldHash, worldHash)
 
     reconciler.destroy()
     prediction.destroy()
 })
 
-test('full sync restores its exact snapshot and bounds residual while replaying retained local inputs', () =>
+test('full sync restores its exact local snapshot and replays retained physical ticks', () =>
 {
     const source = createPrediction()
     const client = createPrediction()
@@ -267,10 +282,13 @@ test('full sync restores its exact snapshot and bounds residual while replaying 
     {
         const input = makeInput(tick, tick, tick < 3 ? -0.15 : 0.2)
         source.step({ inputs: [ { entityOrder: 1, input } ] })
-        reconciler.predict({ inputs: [ {
-            entityOrder: 1,
-            input: makeInput(tick, tick, tick === 2 ? 0.95 : 0.2),
-        } ] })
+        reconciler.predict({
+            predictionTick: tick,
+            inputs: [ {
+                entityOrder: 1,
+                input: makeInput(tick, tick, tick === 2 ? 0.95 : 0.2),
+            } ],
+        })
         if(tick === 3)
         {
             sync = source.captureFullSync()
