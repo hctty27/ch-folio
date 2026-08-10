@@ -7,7 +7,7 @@ import {
     RoomSimulation,
 } from '@ch-folio/authoritative-physics'
 import { PredictionWorld } from '../sources/Game/MultiplayerV2/PredictionWorld.js'
-import { Reconciler } from '../sources/Game/MultiplayerV2/Reconciler.js'
+import { Reconciler, localError } from '../sources/Game/MultiplayerV2/Reconciler.js'
 import {
     runAuthoritativeScenario,
     runScenarioWithAdapter,
@@ -23,6 +23,11 @@ const SAFE_INPUT = Object.freeze({
     suspensions: 0,
     flags: 0,
 })
+
+const OWNER_SOFT_POSITION_METERS = 0.05
+const OWNER_SOFT_ROTATION_RADIANS = Math.PI / 180
+const OWNER_SOFT_LINEAR_VELOCITY = 0.25
+const OWNER_SOFT_ANGULAR_VELOCITY = 0.10
 
 export const NETWORK_CASES = Object.freeze({
     DELAY_JITTER_REORDER_DROP_BATCH: 'delay-jitter-reorder-drop-batch',
@@ -50,6 +55,25 @@ function cloneInput(input)
         steering: Number(input.steering),
         suspensions: Number(input.suspensions),
         flags: Number(input.flags),
+    }
+}
+
+function ownerConvergence(server, client, entityOrder = 1)
+{
+    const serverState = server.readState(entityOrder)
+    const clientState = client.readState(entityOrder)
+    const error = localError(clientState, serverState)
+    const divergent = (
+        error.position > OWNER_SOFT_POSITION_METERS
+        || error.rotation > OWNER_SOFT_ROTATION_RADIANS
+        || error.linearVelocity > OWNER_SOFT_LINEAR_VELOCITY
+        || error.angularVelocity > OWNER_SOFT_ANGULAR_VELOCITY
+    )
+    return {
+        serverState,
+        clientState,
+        error,
+        persistentDivergence: divergent ? 1 : 0,
     }
 }
 
@@ -145,7 +169,7 @@ async function delaySimulation({ RAPIER, fixture, seed })
             const inputs = grouped.get(tick) ?? []
             server.applyInputs(inputs)
             server.step()
-            reconciler.predict({ inputs })
+            reconciler.predict({ predictionTick: tick, inputs })
 
             if(tick % 3 === 0)
             {
@@ -203,16 +227,16 @@ async function delaySimulation({ RAPIER, fixture, seed })
             await reconciler.reconcileState(frame)
         }
 
+        const convergence = ownerConvergence(server, client)
         return {
             minLatencyMs: Math.min(...observedLatencies),
             maxLatencyMs: Math.max(...observedLatencies),
             reorderedFrames,
             droppedFrames,
             batchedDeliveries,
-            persistentDivergence: server.checksum() === client.checksum() ? 0 : 1,
-            finalServerChecksum: server.checksum(),
-            finalClientChecksum: client.checksum(),
+            ...convergence,
             hardSyncReasons,
+            rollbackCount: reconciler.rollbackCount,
             partialRollbackApplied: false,
         }
     }
@@ -245,7 +269,7 @@ async function oldAuthoritySimulation({ RAPIER, fixture })
             const inputs = grouped.get(tick) ?? []
             server.applyInputs(inputs)
             server.step()
-            reconciler.predict({ inputs })
+            reconciler.predict({ predictionTick: tick, inputs })
         }
 
         const oldFrame = {
@@ -258,16 +282,16 @@ async function oldAuthoritySimulation({ RAPIER, fixture })
             throw new Error('old authority did not request hard sync')
 
         reconciler.applyFullSync(server.captureFullSync())
+        const convergence = ownerConvergence(server, client)
         return {
             minLatencyMs: 0,
             maxLatencyMs: 300,
             reorderedFrames: 0,
             droppedFrames: 0,
             batchedDeliveries: 0,
-            persistentDivergence: server.checksum() === client.checksum() ? 0 : 1,
-            finalServerChecksum: server.checksum(),
-            finalClientChecksum: client.checksum(),
+            ...convergence,
             hardSyncReasons,
+            rollbackCount: reconciler.rollbackCount,
             partialRollbackApplied: false,
         }
     }
