@@ -15,6 +15,7 @@ function report(gauges = {})
                 futureInputCountMax: 100,
                 futureLeadMaxTicks: 18,
                 staleInputMax: 0,
+                lateInputRate: 0,
                 persistentFutureQueueGrowth: false,
                 ...gauges,
             },
