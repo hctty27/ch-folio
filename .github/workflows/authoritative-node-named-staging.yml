@@ -1,9 +1,6 @@
 name: Node Authoritative Named Staging Acceptance
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -22,14 +19,6 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Pin exact implementation head
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
-          test "$(git rev-parse origin/design/server-tick-aligned-prediction)" = "ab8ce2d170eb41f5b65716afacac54e0b44bb34f"
-          git checkout --detach ab8ce2d170eb41f5b65716afacac54e0b44bb34f
-          git rev-parse HEAD
       - uses: actions/setup-node@v4
         with:
           node-version: 24
