@@ -8,6 +8,7 @@ const BENCHMARK_TOKEN = 'benchmark-token-0123456789abcdef0123456789abcdef'
 const FINITE_FIELDS = [
     'intervalWallMs',
     'intervalCpuMs',
+    'intervalMainThreadCpuMs',
     'voluntaryContextSwitches',
     'involuntaryContextSwitches',
     'eventLoopActiveMs',
@@ -39,6 +40,7 @@ test('benchmark scheduler records overload callback evidence and reset clears it
             assert.equal(Number.isFinite(diagnostic[field]), true, `${field} must be finite`)
             assert.ok(diagnostic[field] >= 0, `${field} must be non-negative`)
         }
+        assert.ok(diagnostic.intervalMainThreadCpuMs <= diagnostic.intervalCpuMs + 0.5)
         assert.ok(diagnostic.eventLoopUtilization <= 1)
 
         room.metrics.resetBenchmark()
