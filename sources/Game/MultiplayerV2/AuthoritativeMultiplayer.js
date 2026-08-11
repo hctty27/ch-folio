@@ -12,10 +12,13 @@ import { PredictionWorld } from './PredictionWorld.js'
 import { Reconciler } from './Reconciler.js'
 import { Server, normalizeRoom } from './Server.js'
 import { SyncOverlay } from './SyncOverlay.js'
+import { tickAdd, tickAfter } from './TickMath.js'
+import { TickSynchronizer } from './TickSynchronizer.js'
 import { VehicleVisuals } from './VehicleVisuals.js'
 
 const FIXED_DT = 1 / 60
 const MAX_CATCH_UP_TICKS = 3
+const MAX_FULL_SYNC_FAST_FORWARD_TICKS = 18
 const STORAGE_PREFIX = 'ch-folio:multiplayer:v2:'
 const TOKEN_BYTES = 32
 
@@ -39,6 +42,11 @@ function defaultStorage()
     {
         return null
     }
+}
+
+function defaultNow()
+{
+    return globalThis.performance?.now?.() ?? Date.now()
 }
 
 function uint32(value)
@@ -107,9 +115,14 @@ export class AuthoritativeMultiplayer
         VehicleVisualsClass = VehicleVisuals,
         ReconcilerClass = Reconciler,
         InputPublisherClass = InputPublisher,
+        TickSynchronizerClass = TickSynchronizer,
         SyncOverlayClass = SyncOverlay,
+        now = defaultNow,
     } = {})
     {
+        if(typeof now !== 'function')
+            throw new TypeError('now must be a function')
+
         this.game = game
         this.server = server ?? new Server()
         this.storage = storage
@@ -118,6 +131,8 @@ export class AuthoritativeMultiplayer
         this.VehicleVisualsClass = VehicleVisualsClass
         this.ReconcilerClass = ReconcilerClass
         this.InputPublisherClass = InputPublisherClass
+        this.TickSynchronizerClass = TickSynchronizerClass
+        this.now = now
 
         this.overlay = new SyncOverlayClass()
         this.state = AUTHORITATIVE_MULTIPLAYER_STATES.STOPPED
@@ -137,6 +152,7 @@ export class AuthoritativeMultiplayer
         this.visuals = null
         this.reconciler = null
         this.inputPublisher = null
+        this.tickSynchronizer = null
         this.accumulator = 0
         this.frameQueue = Promise.resolve()
 
@@ -147,6 +163,29 @@ export class AuthoritativeMultiplayer
         this.errorCallback = (error) => this.onTransportError(error)
 
         this.game?.ticker?.events?.on('tick', this.tickCallback, 10)
+    }
+
+    get diagnostics()
+    {
+        let remoteInterpolationBufferDepth = 0
+        for(const buffer of this.visuals?.remoteBuffers?.values?.() ?? [])
+        {
+            const size = Number(buffer?.size ?? 0)
+            if(Number.isFinite(size))
+                remoteInterpolationBufferDepth = Math.max(remoteInterpolationBufferDepth, size)
+        }
+
+        return {
+            commandLeadTicks: Number(this.tickSynchronizer?.commandLeadTicks ?? 0),
+            lateInputCount: Number(this.tickSynchronizer?.lateAcks ?? 0),
+            rollbackCount: Number(this.reconciler?.rollbackCount ?? 0),
+            hardSyncCount: Number(this.reconciler?.hardSyncCount ?? 0),
+            correctionCount: Number(this.visuals?.correctionCount ?? 0),
+            rttMs: Number(this.tickSynchronizer?.rttMs ?? 0),
+            jitterMs: Number(this.tickSynchronizer?.jitterMs ?? 0),
+            clockDiscontinuities: Number(this.tickSynchronizer?.clockDiscontinuities ?? 0),
+            remoteInterpolationBufferDepth,
+        }
     }
 
     setState(state, detail = null)
@@ -390,6 +429,10 @@ export class AuthoritativeMultiplayer
 
         this.clearRuntime()
         this.localEntityOrder = descriptor.entityOrder
+        this.tickSynchronizer = new this.TickSynchronizerClass()
+        const nowMs = this.now()
+        this.tickSynchronizer.reset(sync.serverTick, nowMs)
+
         this.predictionWorld = new this.PredictionWorldClass({
             RAPIER: this.game.RAPIER,
         })
@@ -409,12 +452,20 @@ export class AuthoritativeMultiplayer
                 this.visuals?.reconcile(before, after, options),
         })
         this.inputPublisher = new this.InputPublisherClass(this.game, {
+            entityOrder: this.localEntityOrder,
             isActive: () => this.state === AUTHORITATIVE_MULTIPLAYER_STATES.ACTIVE,
-            recordPredictionInput: () => {},
+            recordPredictionInput: (record) => this.reconciler?.recordInputs?.([ record ]),
+            onBatchSent: (records, sentAtMs) => this.recordSentBatch(records, sentAtMs),
             sendFrame: (frame) => this.server.sendFrame(frame),
+            now: () => this.now(),
         })
 
         this.reconciler.applyFullSync(sync)
+        this.predictionWorld.setLocalEntityOrder?.(this.localEntityOrder)
+        this.predictionWorld.retainLocalEntity?.()
+        const targetTick = this.tickSynchronizer.desiredPredictionTick(this.now())
+        this.advancePredictionToward(targetTick, MAX_FULL_SYNC_FAST_FORWARD_TICKS)
+
         this.pendingFullSync = null
         this.lastServerTick = uint32(sync.serverTick)
         this.accumulator = 0
@@ -424,12 +475,55 @@ export class AuthoritativeMultiplayer
         return true
     }
 
+    recordSentBatch(records, sentAtMs)
+    {
+        if(!this.tickSynchronizer || !Array.isArray(records))
+            return 0
+
+        let recorded = 0
+        for(const record of records)
+        {
+            const input = record?.input
+            if(!input)
+                continue
+            this.tickSynchronizer.recordSent(
+                input.sequence,
+                input.clientTick,
+                sentAtMs,
+            )
+            recorded++
+        }
+        return recorded
+    }
+
     async acceptStateFrame(frame)
     {
-        if(!this.reconciler)
+        if(!this.reconciler || !this.tickSynchronizer)
         {
             this.requestFullSync('state-before-full-sync')
             return
+        }
+
+        const nowMs = this.now()
+        const discontinuitiesBefore = this.tickSynchronizer.clockDiscontinuities
+        this.tickSynchronizer.observeState(frame.serverTick, nowMs)
+        if(this.tickSynchronizer.clockDiscontinuities > discontinuitiesBefore)
+        {
+            this.requestFullSync('clock-discontinuity')
+            return
+        }
+
+        this.visuals?.acceptAuthoritativeStateFrame?.(frame)
+        const local = frame.states.find(
+            (state) => state.entityOrder === this.localEntityOrder,
+        )
+        if(local)
+        {
+            this.tickSynchronizer.acknowledge?.(
+                local.lastConfirmedSequence,
+                frame.serverTick,
+                nowMs,
+            )
         }
 
         await this.reconciler.reconcileState(frame)
@@ -446,8 +540,8 @@ export class AuthoritativeMultiplayer
             return false
         }
 
-        const active = this.predictionWorld.readState()
-            .some((state) => state.entityOrder === this.localEntityOrder)
+        const local = this.predictionWorld.readState(this.localEntityOrder)
+        const active = local !== null && local !== undefined
         this.setState(active
             ? AUTHORITATIVE_MULTIPLAYER_STATES.ACTIVE
             : AUTHORITATIVE_MULTIPLAYER_STATES.WAITING_SPAWN)
@@ -460,6 +554,33 @@ export class AuthoritativeMultiplayer
         return this.server.sendFrame(encodeFullSyncRequest())
     }
 
+    advancePredictionToward(targetTick, maxTicks = MAX_CATCH_UP_TICKS)
+    {
+        if(!this.reconciler || !this.predictionWorld || !this.inputPublisher)
+            return 0
+
+        const target = uint32(targetTick)
+        let advanced = 0
+        while(
+            tickAfter(target, this.predictionWorld.tick)
+            && advanced < maxTicks
+        )
+        {
+            const predictionTick = tickAdd(this.predictionWorld.tick, 1)
+            const input = this.inputPublisher.sample(predictionTick)
+            this.reconciler.predict({
+                predictionTick,
+                inputs: [ {
+                    predictionTick,
+                    entityOrder: this.localEntityOrder,
+                    input,
+                } ],
+            })
+            advanced++
+        }
+        return advanced
+    }
+
     update()
     {
         if(!this.started || this.destroyed)
@@ -467,29 +588,26 @@ export class AuthoritativeMultiplayer
 
         if(this.pendingFullSync !== null)
             this.tryApplyPendingFullSync()
-        if(!this.reconciler || !this.predictionWorld || !this.inputPublisher)
+        if(
+            !this.reconciler
+            || !this.predictionWorld
+            || !this.inputPublisher
+            || !this.tickSynchronizer
+        )
             return
 
         const delta = Math.max(0, Number(this.game?.ticker?.delta ?? 0))
-        this.accumulator += Math.min(delta, FIXED_DT * MAX_CATCH_UP_TICKS)
-
-        let advanced = 0
-        while(this.accumulator + Number.EPSILON >= FIXED_DT && advanced < MAX_CATCH_UP_TICKS)
-        {
-            const tick = (this.predictionWorld.tick + 1) >>> 0
-            const input = this.inputPublisher.sample(tick)
-            this.reconciler.predict({
-                inputs: [ {
-                    entityOrder: this.localEntityOrder,
-                    input,
-                } ],
-            })
-            this.accumulator -= FIXED_DT
-            advanced++
-        }
+        const nowMs = this.now()
+        const targetTick = this.tickSynchronizer.desiredPredictionTick(nowMs)
+        this.advancePredictionToward(targetTick, MAX_CATCH_UP_TICKS)
 
         if(this.state === AUTHORITATIVE_MULTIPLAYER_STATES.ACTIVE)
-            this.visuals?.update(delta)
+        {
+            this.visuals?.update(
+                delta,
+                this.tickSynchronizer.interpolationTick(nowMs),
+            )
+        }
     }
 
     clearRuntime()
@@ -501,7 +619,9 @@ export class AuthoritativeMultiplayer
         this.visuals = null
         this.predictionWorld = null
         this.inputPublisher = null
+        this.tickSynchronizer = null
         this.localEntityOrder = null
+        this.accumulator = 0
     }
 
     readCredential()
