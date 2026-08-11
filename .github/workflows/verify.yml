@@ -34,5 +34,56 @@ jobs:
         run: |
           npm ci
           npm ci --prefix authoritative-node --ignore-scripts
-      - name: Run scheduler overload diagnostic regression
-        run: node --test authoritative-node/test/schedulerOverloadDiagnostics.test.mjs
+      - name: Run authoritative Node and hosted timeline regressions
+        run: |
+          npm test --prefix authoritative-node
+          node --test scripts/test_authoritative_node_loadtest.mjs
+      - name: Run 8-client warmup plus 30-second measured loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::${TOKEN}"
+          LOG="${RUNNER_TEMP}/scheduler-diagnostics-node.log"
+
+          HOST=127.0.0.1 \
+          PORT=18080 \
+          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
+          node authoritative-node/src/index.js >"${LOG}" 2>&1 &
+          SERVER_PID=$!
+          cleanup() {
+            kill "${SERVER_PID}" 2>/dev/null || true
+            wait "${SERVER_PID}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+              cat "${LOG}" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          test "${ready}" -eq 1
+
+          AUTHORITATIVE_BENCHMARK_TOKEN="${TOKEN}" \
+          AUTHORITATIVE_BENCHMARK_COMMIT="$(git rev-parse HEAD)" \
+            node scripts/loadtest-authoritative-node.mjs \
+              --url=ws://127.0.0.1:18080/ws \
+              --room=scheduler-diagnostics-loopback-30s \
+              --clients=8 \
+              --seconds=30 \
+            | tee authoritative-node-scheduler-diagnostics-30s.json
+      - name: Upload scheduler diagnostics evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-authoritative-scheduler-diagnostics-30s
+          path: authoritative-node-scheduler-diagnostics-30s.json
+          if-no-files-found: error
+          retention-days: 30
