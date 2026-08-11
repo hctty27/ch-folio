@@ -13,6 +13,14 @@ function cpuMilliseconds(started)
     return (usage.user + usage.system) / 1000
 }
 
+function cpuUsageDeltaMilliseconds(started, completed)
+{
+    return (
+        Math.max(0, completed.user - started.user)
+        + Math.max(0, completed.system - started.system)
+    ) / 1000
+}
+
 function contextSwitchDelta(started, completed)
 {
     return {
@@ -29,6 +37,63 @@ function contextSwitchDelta(started, completed)
 
 export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
 {
+    constructor(options = {})
+    {
+        super(options)
+        this.schedulerCallbackProbe = null
+        this.resetSchedulerCallbackProbe()
+
+        const rawOnCallback = this.scheduler.onCallback
+        this.scheduler.onCallback = (dueTicks, executedTicks) =>
+        {
+            const previous = this.schedulerCallbackProbe
+            const completedAtMs = performance.now()
+            const completedCpu = cpuUsage()
+            const completedResource = resourceUsage()
+            const eventLoopDelta = performance.eventLoopUtilization(
+                previous.eventLoopUtilization,
+            )
+
+            this.schedulerCallbackProbe = {
+                atMs: completedAtMs,
+                cpu: completedCpu,
+                resource: completedResource,
+                eventLoopUtilization: performance.eventLoopUtilization(),
+            }
+
+            rawOnCallback?.(dueTicks, executedTicks)
+            if(dueTicks <= executedTicks)
+                return
+
+            const switches = contextSwitchDelta(previous.resource, completedResource)
+            this.metrics.recordSchedulerOverloadDiagnostic({
+                dueTicks,
+                executedTicks,
+                currentTick: this.currentTick,
+                intervalWallMs: Math.max(0, completedAtMs - previous.atMs),
+                intervalCpuMs: cpuUsageDeltaMilliseconds(previous.cpu, completedCpu),
+                voluntaryContextSwitches: switches.voluntary,
+                involuntaryContextSwitches: switches.involuntary,
+                eventLoopActiveMs: Math.max(0, eventLoopDelta.active),
+                eventLoopIdleMs: Math.max(0, eventLoopDelta.idle),
+                eventLoopUtilization: Math.max(
+                    0,
+                    Math.min(1, eventLoopDelta.utilization),
+                ),
+            })
+        }
+    }
+
+    resetSchedulerCallbackProbe()
+    {
+        this.schedulerCallbackProbe = {
+            atMs: performance.now(),
+            cpu: cpuUsage(),
+            resource: resourceUsage(),
+            eventLoopUtilization: performance.eventLoopUtilization(),
+        }
+    }
+
     async acceptBenchmarkSummary(socket, bytes)
     {
         const rawSafeSend = this.safeSend
@@ -55,7 +120,10 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
         }
 
         if(summarySent)
+        {
             this.metrics.resetBenchmark()
+            this.resetSchedulerCallbackProbe()
+        }
     }
 
     ensureRuntime()
