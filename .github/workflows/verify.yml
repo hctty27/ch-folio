@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-only-validation
+  group: hosted-remainder-validation
   cancel-in-progress: true
 
 jobs:
@@ -31,13 +31,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Install build dependencies
+      - name: Install root dependencies
         run: npm ci
-      - name: Record memory before build
-        shell: bash
+      - name: Run authoritative Node suite
         run: |
-          free -h
-          cat /proc/meminfo | grep -E 'MemAvailable|SwapFree|SwapTotal'
-      - name: Run production build with RSS evidence
-        shell: bash
-        run: /usr/bin/time -v npm run build
+          npm ci --prefix authoritative-node --ignore-scripts
+          npm test --prefix authoritative-node
+      - name: Run multiplayer Worker suite and dry-run
+        run: |
+          npm install --prefix multiplayer-worker --ignore-scripts
+          npm test --prefix multiplayer-worker
+          npm run check --prefix multiplayer-worker
+          cd multiplayer-worker
+          npx wrangler deploy --dry-run
