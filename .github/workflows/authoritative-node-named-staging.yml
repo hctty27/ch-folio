@@ -1,6 +1,9 @@
 name: Node Authoritative Named Staging Acceptance
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -19,6 +22,14 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Pin exact implementation head
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMPLEMENTATION_SHA="96ad8bc07c3da77464e165403f0f4f85cc9d3090"
+          git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
+          git checkout --detach "${IMPLEMENTATION_SHA}"
+          test "$(git rev-parse HEAD)" = "${IMPLEMENTATION_SHA}"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
