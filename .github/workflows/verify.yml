@@ -1,6 +1,9 @@
 name: Verify
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -16,20 +19,25 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout server-tick prediction implementation branch
+      - name: Checkout exact implementation head
         shell: bash
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
-          git checkout --detach origin/design/server-tick-aligned-prediction
+          test "$(git rev-parse origin/design/server-tick-aligned-prediction)" = "4c8054d889c212509c0841052001de40d934889a"
+          git checkout --detach 4c8054d889c212509c0841052001de40d934889a
           git rev-parse HEAD
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Install validation dependencies
+      - name: Install build dependencies
         run: npm ci
-      - name: Run future queue hosted gate regressions
+      - name: Record memory before build
+        shell: bash
         run: |
-          node --test scripts/test_v2_future_queue_gates.mjs
-          node --test scripts/test_authoritative_node_loadtest.mjs
+          free -h
+          cat /proc/meminfo | grep -E 'MemAvailable|SwapFree|SwapTotal'
+      - name: Run production build with RSS evidence
+        shell: bash
+        run: /usr/bin/time -v npm run build
