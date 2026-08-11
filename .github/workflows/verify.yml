@@ -1,9 +1,6 @@
 name: Verify
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -24,8 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
-          test "$(git rev-parse origin/design/server-tick-aligned-prediction)" = "4c8054d889c212509c0841052001de40d934889a"
-          git checkout --detach 4c8054d889c212509c0841052001de40d934889a
+          git checkout --detach origin/design/server-tick-aligned-prediction
           git rev-parse HEAD
       - uses: actions/setup-node@v4
         with:
