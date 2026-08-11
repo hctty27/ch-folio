@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks'
-import { cpuUsage, resourceUsage } from 'node:process'
+import { cpuUsage, resourceUsage, threadCpuUsage } from 'node:process'
 
 import {
     BENCHMARK_FRAME_TYPES,
@@ -49,6 +49,7 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
             const previous = this.schedulerCallbackProbe
             const completedAtMs = performance.now()
             const completedCpu = cpuUsage()
+            const completedThreadCpu = threadCpuUsage()
             const completedResource = resourceUsage()
             const eventLoopDelta = performance.eventLoopUtilization(
                 previous.eventLoopUtilization,
@@ -57,6 +58,7 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
             this.schedulerCallbackProbe = {
                 atMs: completedAtMs,
                 cpu: completedCpu,
+                threadCpu: completedThreadCpu,
                 resource: completedResource,
                 eventLoopUtilization: performance.eventLoopUtilization(),
             }
@@ -72,6 +74,10 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
                 currentTick: this.currentTick,
                 intervalWallMs: Math.max(0, completedAtMs - previous.atMs),
                 intervalCpuMs: cpuUsageDeltaMilliseconds(previous.cpu, completedCpu),
+                intervalMainThreadCpuMs: cpuUsageDeltaMilliseconds(
+                    previous.threadCpu,
+                    completedThreadCpu,
+                ),
                 voluntaryContextSwitches: switches.voluntary,
                 involuntaryContextSwitches: switches.involuntary,
                 eventLoopActiveMs: Math.max(0, eventLoopDelta.active),
@@ -89,6 +95,7 @@ export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
         this.schedulerCallbackProbe = {
             atMs: performance.now(),
             cpu: cpuUsage(),
+            threadCpu: threadCpuUsage(),
             resource: resourceUsage(),
             eventLoopUtilization: performance.eventLoopUtilization(),
         }
