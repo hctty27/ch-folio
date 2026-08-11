@@ -1,6 +1,9 @@
 name: Node Authoritative Named Staging Acceptance
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -19,6 +22,14 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Pin exact implementation head
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMPLEMENTATION_SHA="e1eb46856abf90256a7713e8d89fdf43006aaa62"
+          git fetch --no-tags --depth=1 origin design/server-tick-aligned-prediction
+          git checkout --detach "${IMPLEMENTATION_SHA}"
+          test "$(git rev-parse HEAD)" = "${IMPLEMENTATION_SHA}"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -123,7 +134,7 @@ jobs:
           AUTHORITATIVE_BENCHMARK_COMMIT="$(git rev-parse HEAD)" \
             node scripts/loadtest-authoritative-node.mjs \
               --url="${WSS_URL}" \
-              --room=named-staging-600s \
+              --room=named-staging-scheduler-diagnostics-600s \
               --clients=8 \
               --seconds=600 \
             | tee authoritative-node-named-staging-loadtest.json
