@@ -140,12 +140,37 @@ test('FrameRouter retains one-shot frames that arrive before waitFor', async () 
     assert.equal(received, expected)
 })
 
-test('Node hosted gates pass at exact limits and do not treat RSS as the Durable Object 96 MiB gate', () =>
+test('Node load command timeline predicts ahead and serializes predictionTick minus three', async () =>
+{
+    const module = await import('./loadtest-authoritative-node.mjs')
+    assert.equal(typeof module.nextBenchmarkPredictionTick, 'function')
+    assert.equal(typeof module.commandTickForBenchmarkPrediction, 'function')
+
+    const firstPrediction = module.nextBenchmarkPredictionTick(100, null)
+    const secondPrediction = module.nextBenchmarkPredictionTick(100, firstPrediction)
+    const caughtUpPrediction = module.nextBenchmarkPredictionTick(105, secondPrediction)
+
+    assert.equal(firstPrediction, 108)
+    assert.equal(secondPrediction, 109)
+    assert.equal(caughtUpPrediction, 113)
+    assert.equal(module.commandTickForBenchmarkPrediction(firstPrediction), 105)
+    assert.equal(module.commandTickForBenchmarkPrediction(secondPrediction), 106)
+    assert.equal(module.commandTickForBenchmarkPrediction(caughtUpPrediction), 110)
+})
+
+test('Node hosted gates pass at exact limits and allow bounded future queue depth', () =>
 {
     const report = {
         server: {
             phases: { totalTick: { p95Ms: 8, p99Ms: 12, maxMs: 16.67 } },
-            gauges: { maxQueueDepth: 3 },
+            gauges: {
+                maxQueueDepth: 100,
+                futureInputCountMax: 100,
+                futureLeadMaxTicks: 18,
+                staleInputMax: 0,
+                lateInputRate: 0.01,
+                persistentFutureQueueGrowth: false,
+            },
             scheduler: { overloadCallbacks: 0 },
             observedPeakMemoryBytes: 512 * 1024 * 1024,
         },
@@ -160,12 +185,19 @@ test('Node hosted gates pass at exact limits and do not treat RSS as the Durable
     assert.deepEqual(result.failures, [])
 })
 
-test('Node hosted gates reject every timing, queue, overload, disconnect, backlog, divergence, and restart breach', () =>
+test('Node hosted gates reject timing, late/stale queue, lead, growth, overload, disconnect, backlog, divergence, and restart breaches', () =>
 {
     const report = {
         server: {
             phases: { totalTick: { p95Ms: 8.01, p99Ms: 12.01, maxMs: 16.68 } },
-            gauges: { maxQueueDepth: 4 },
+            gauges: {
+                maxQueueDepth: 100,
+                futureInputCountMax: 100,
+                futureLeadMaxTicks: 19,
+                staleInputMax: 1,
+                lateInputRate: 0.0101,
+                persistentFutureQueueGrowth: true,
+            },
             scheduler: { overloadCallbacks: 1 },
             observedPeakMemoryBytes: 1024 * 1024 * 1024,
         },
@@ -181,12 +213,16 @@ test('Node hosted gates reject every timing, queue, overload, disconnect, backlo
         'server.totalTick.p95Ms',
         'server.totalTick.p99Ms',
         'server.totalTick.maxMs',
-        'server.gauges.maxQueueDepth',
+        'server.gauges.staleInputMax',
+        'server.gauges.futureLeadMaxTicks',
+        'server.gauges.lateInputRate',
+        'server.gauges.persistentFutureQueueGrowth',
         'server.scheduler.overloadCallbacks',
         'disconnects',
         'backlog.persistent',
         'divergence.persistent',
         'roomRestarts',
     ])
+    assert.equal(result.failures.some(({ gate }) => gate.includes('maxQueueDepth')), false)
     assert.equal(result.failures.some(({ gate }) => gate.includes('memory')), false)
 })

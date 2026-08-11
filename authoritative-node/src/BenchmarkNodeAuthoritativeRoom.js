@@ -1,13 +1,24 @@
 import { performance } from 'node:perf_hooks'
-import { cpuUsage, resourceUsage } from 'node:process'
+import { cpuUsage, resourceUsage, threadCpuUsage } from 'node:process'
 
-import { encodeStateFrame } from '@ch-folio/authoritative-physics'
+import {
+    BENCHMARK_FRAME_TYPES,
+    encodeStateFrame,
+} from '@ch-folio/authoritative-physics'
 import { NodeAuthoritativeRoom } from './NodeAuthoritativeRoom.js'
 
 function cpuMilliseconds(started)
 {
     const usage = cpuUsage(started)
     return (usage.user + usage.system) / 1000
+}
+
+function cpuUsageDeltaMilliseconds(started, completed)
+{
+    return (
+        Math.max(0, completed.user - started.user)
+        + Math.max(0, completed.system - started.system)
+    ) / 1000
 }
 
 function contextSwitchDelta(started, completed)
@@ -26,6 +37,102 @@ function contextSwitchDelta(started, completed)
 
 export class BenchmarkNodeAuthoritativeRoom extends NodeAuthoritativeRoom
 {
+    constructor(options = {})
+    {
+        super(options)
+        this.schedulerCallbackProbe = null
+        this.resetSchedulerCallbackProbe()
+
+        const rawOnCallback = this.scheduler.onCallback
+        this.scheduler.onCallback = (dueTicks, executedTicks) =>
+        {
+            const previous = this.schedulerCallbackProbe
+            const completedAtMs = performance.now()
+            const completedCpu = cpuUsage()
+            const completedThreadCpu = threadCpuUsage()
+            const completedResource = resourceUsage()
+            const eventLoopDelta = performance.eventLoopUtilization(
+                previous.eventLoopUtilization,
+            )
+
+            this.schedulerCallbackProbe = {
+                atMs: completedAtMs,
+                cpu: completedCpu,
+                threadCpu: completedThreadCpu,
+                resource: completedResource,
+                eventLoopUtilization: performance.eventLoopUtilization(),
+            }
+
+            rawOnCallback?.(dueTicks, executedTicks)
+            if(dueTicks <= executedTicks)
+                return
+
+            const switches = contextSwitchDelta(previous.resource, completedResource)
+            this.metrics.recordSchedulerOverloadDiagnostic({
+                dueTicks,
+                executedTicks,
+                currentTick: this.currentTick,
+                intervalWallMs: Math.max(0, completedAtMs - previous.atMs),
+                intervalCpuMs: cpuUsageDeltaMilliseconds(previous.cpu, completedCpu),
+                intervalMainThreadCpuMs: cpuUsageDeltaMilliseconds(
+                    previous.threadCpu,
+                    completedThreadCpu,
+                ),
+                voluntaryContextSwitches: switches.voluntary,
+                involuntaryContextSwitches: switches.involuntary,
+                eventLoopActiveMs: Math.max(0, eventLoopDelta.active),
+                eventLoopIdleMs: Math.max(0, eventLoopDelta.idle),
+                eventLoopUtilization: Math.max(
+                    0,
+                    Math.min(1, eventLoopDelta.utilization),
+                ),
+            })
+        }
+    }
+
+    resetSchedulerCallbackProbe()
+    {
+        this.schedulerCallbackProbe = {
+            atMs: performance.now(),
+            cpu: cpuUsage(),
+            threadCpu: threadCpuUsage(),
+            resource: resourceUsage(),
+            eventLoopUtilization: performance.eventLoopUtilization(),
+        }
+    }
+
+    async acceptBenchmarkSummary(socket, bytes)
+    {
+        const rawSafeSend = this.safeSend
+        let summarySent = false
+        this.safeSend = (target, frame) =>
+        {
+            const sent = rawSafeSend.call(this, target, frame)
+            if(
+                sent
+                && target === socket
+                && frame?.[0] === BENCHMARK_FRAME_TYPES.SUMMARY
+            )
+                summarySent = true
+            return sent
+        }
+
+        try
+        {
+            await super.acceptBenchmarkSummary(socket, bytes)
+        }
+        finally
+        {
+            this.safeSend = rawSafeSend
+        }
+
+        if(summarySent)
+        {
+            this.metrics.resetBenchmark()
+            this.resetSchedulerCallbackProbe()
+        }
+    }
+
     ensureRuntime()
     {
         const alreadyLoaded = this.simulation !== null

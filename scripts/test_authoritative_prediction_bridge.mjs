@@ -121,13 +121,38 @@ test('prediction world restores a full-room Rapier snapshot and queued inputs', 
     restored.destroy()
 })
 
-test('vehicle visuals mirror local state, create render-only remotes, and never mutate prediction state', () =>
+test('vehicle visuals mirror local prediction and render remotes only from authoritative buffers', () =>
 {
-    const sharedStates = [
-        { entityOrder: 1, position: [ 1, 2, 3 ], quaternion: [ 0, 0, 0, 1 ], linearVelocity: [ 4, 0, 0 ], angularVelocity: [ 0, 1, 0 ], steering: 0.2, suspensions: 0, wheelContacts: [] },
-        { entityOrder: 2, position: [ 5, 6, 7 ], quaternion: [ 0, 0, 0, 1 ], linearVelocity: [ 2, 0, 0 ], angularVelocity: [ 0, 0, 0 ], steering: -0.2, suspensions: 0, wheelContacts: [] },
-    ]
-    const original = structuredClone(sharedStates)
+    const localState = {
+        entityOrder: 1,
+        position: [ 1, 2, 3 ],
+        quaternion: [ 0, 0, 0, 1 ],
+        linearVelocity: [ 4, 0, 0 ],
+        angularVelocity: [ 0, 1, 0 ],
+        steering: 0.2,
+        suspensions: 0,
+        wheelContacts: [],
+    }
+    const remoteState = {
+        entityOrder: 2,
+        stateFlags: 3,
+        collisionFlags: 0,
+        suspensions: 0,
+        lastConfirmedSequence: 0,
+        position: [ 5, 6, 7 ],
+        quaternion: [ 0, 0, 0, 1 ],
+        linearVelocity: [ 2, 0, 0 ],
+        angularVelocity: [ 0, 0, 0 ],
+        steering: -0.2,
+        wheelRotations: [ 1, 2, 3, 4 ],
+        controlFlags: 0,
+        throttle: 128,
+        brake: 0,
+        inputFlags: 0,
+    }
+    const originalLocal = structuredClone(localState)
+    const originalRemote = structuredClone(remoteState)
+    const predictionReads = []
     const local = {
         modes: [],
         states: [],
@@ -152,24 +177,50 @@ test('vehicle visuals mirror local state, create render-only remotes, and never 
 
     const visuals = new VehicleVisuals({
         game: {},
-        predictionWorld: { readState: () => sharedStates },
+        predictionWorld: {
+            readState(entityOrder)
+            {
+                predictionReads.push(entityOrder)
+                assert.equal(entityOrder, 1)
+                return localState
+            },
+        },
         localEntityOrder: 1,
         physicalVehicle: local,
         vehicleTemplate: {},
         RemoteVehicleClass: FakeRemoteVehicle,
     })
+    visuals.acceptAuthoritativeStateFrame({
+        serverTick: 10,
+        states: [ remoteState ],
+        events: [],
+    })
 
     assert.deepEqual(local.modes, [ true ])
-    assert.equal(visuals.update(), 2)
+    assert.equal(visuals.update(1 / 60, 10), 2)
+    assert.deepEqual(predictionReads, [ 1 ])
     assert.equal(local.states.length, 1)
     assert.equal(remotes.length, 1)
     assert.equal(remotes[0].entityOrder, 2)
     assert.equal(remotes[0].updated, true)
-    assert.deepEqual(sharedStates, original)
+    assert.deepEqual(localState, originalLocal)
+    assert.deepEqual(remoteState, originalRemote)
 
-    sharedStates.splice(1)
-    visuals.update()
+    visuals.acceptAuthoritativeStateFrame({
+        serverTick: 11,
+        states: [],
+        events: [ {
+            tick: 11,
+            type: ROOM_EVENT_TYPES.DESPAWN,
+            entityOrder: 2,
+            spawnIndex: 0xff,
+            flags: 0,
+            value: 0,
+        } ],
+    })
     assert.equal(remotes[0].destroyed, true)
+    assert.equal(visuals.remoteBuffers.size, 0)
+
     visuals.destroy()
     assert.deepEqual(local.modes, [ true, false ])
 })
