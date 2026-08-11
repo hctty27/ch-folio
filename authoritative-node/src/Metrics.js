@@ -200,6 +200,10 @@ export class Metrics extends MetricsBase
             currentTick: nonNegativeInteger(value?.currentTick, 'currentTick'),
             intervalWallMs: finiteNonNegative(value?.intervalWallMs, 'intervalWallMs'),
             intervalCpuMs: finiteNonNegative(value?.intervalCpuMs, 'intervalCpuMs'),
+            intervalMainThreadCpuMs: finiteNonNegative(
+                value?.intervalMainThreadCpuMs,
+                'intervalMainThreadCpuMs',
+            ),
             voluntaryContextSwitches: nonNegativeInteger(
                 value?.voluntaryContextSwitches,
                 'voluntaryContextSwitches',
