@@ -3,12 +3,28 @@ import { Metrics as MetricsBase } from './MetricsBase.js'
 const SUMMARY_TICKS = 600
 const BENCHMARK_TICKS = 36_000
 const PERSISTENT_GROWTH_TICKS = 60
+const MAX_SCHEDULER_OVERLOAD_DIAGNOSTICS = 16
 
 function nonNegativeInteger(value, label)
 {
     if(!Number.isSafeInteger(value) || value < 0)
         throw new RangeError(`${label} must be a non-negative safe integer`)
     return value
+}
+
+function finiteNonNegative(value, label)
+{
+    if(!Number.isFinite(value) || value < 0)
+        throw new RangeError(`${label} must be a finite non-negative number`)
+    return Number(value)
+}
+
+function utilization(value)
+{
+    const number = finiteNonNegative(value, 'eventLoopUtilization')
+    if(number > 1)
+        throw new RangeError('eventLoopUtilization must be <= 1')
+    return number
 }
 
 class QueueDiagnosticsRing
@@ -171,6 +187,42 @@ export class Metrics extends MetricsBase
         return this.inputQueueDiagnostics
     }
 
+    recordSchedulerOverloadDiagnostic(value)
+    {
+        const dueTicks = nonNegativeInteger(value?.dueTicks, 'dueTicks')
+        const executedTicks = nonNegativeInteger(value?.executedTicks, 'executedTicks')
+        if(executedTicks > dueTicks)
+            throw new RangeError('executedTicks cannot exceed dueTicks')
+
+        const diagnostic = {
+            dueTicks,
+            executedTicks,
+            currentTick: nonNegativeInteger(value?.currentTick, 'currentTick'),
+            intervalWallMs: finiteNonNegative(value?.intervalWallMs, 'intervalWallMs'),
+            intervalCpuMs: finiteNonNegative(value?.intervalCpuMs, 'intervalCpuMs'),
+            voluntaryContextSwitches: nonNegativeInteger(
+                value?.voluntaryContextSwitches,
+                'voluntaryContextSwitches',
+            ),
+            involuntaryContextSwitches: nonNegativeInteger(
+                value?.involuntaryContextSwitches,
+                'involuntaryContextSwitches',
+            ),
+            eventLoopActiveMs: finiteNonNegative(
+                value?.eventLoopActiveMs,
+                'eventLoopActiveMs',
+            ),
+            eventLoopIdleMs: finiteNonNegative(
+                value?.eventLoopIdleMs,
+                'eventLoopIdleMs',
+            ),
+            eventLoopUtilization: utilization(value?.eventLoopUtilization),
+        }
+        if(this.benchmarkSchedulerOverloads.length < MAX_SCHEDULER_OVERLOAD_DIAGNOSTICS)
+            this.benchmarkSchedulerOverloads.push(diagnostic)
+        return diagnostic
+    }
+
     completeTick(tick)
     {
         const enabled = this.inputQueueDiagnosticsEnabled
@@ -195,6 +247,9 @@ export class Metrics extends MetricsBase
     readBenchmarkSummary()
     {
         const summary = super.readBenchmarkSummary()
+        summary.schedulerOverloads = this.benchmarkSchedulerOverloads.map(
+            (diagnostic) => ({ ...diagnostic }),
+        )
         if(this.inputQueueDiagnosticsEnabled)
         {
             Object.assign(
@@ -213,6 +268,7 @@ export class Metrics extends MetricsBase
         this.benchmarkDiagnostics = new Map()
         this.benchmarkPendingDiagnostics = new Map()
         this.benchmarkScheduler = this.emptyScheduler()
+        this.benchmarkSchedulerOverloads = []
         this.benchmarkMaxQueueDepth = this.queueDepth
         this.benchmarkMaxSlots = this.slots
         this.benchmarkDisconnects = 0
@@ -240,6 +296,7 @@ export class Metrics extends MetricsBase
         this.benchmarkInputQueueSamples ??= new QueueDiagnosticsRing(BENCHMARK_TICKS)
         this.windowInputQueueSamples.clear(0)
         this.benchmarkInputQueueSamples.clear(0)
+        this.benchmarkSchedulerOverloads = []
         this.completedWindowQueueGauges = null
     }
 
